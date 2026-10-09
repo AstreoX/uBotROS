@@ -1,0 +1,55 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "uBot ROS",
+    "Description": "uBot ROS 2 adapter: publishes uBot sensors, TF and /clock and accepts velocity commands over a lightweight TCP bridge (ubot_ros_bridge, included). No third-party UE dependencies.",
+    "Category": "uBot",
+    "CreatedBy": "AstreoX",
+    "CreatedByURL": "https://github.com/AstreoX",
+    "DocsURL": "https://github.com/AstreoX/uBotROS",
+    "CanContainContent": false,
+    "IsBetaVersion": true,
+    "Plugins": [
+        {
+            "Name": "UBotCore",
+            "Enabled": true
+        },
+        {
+            "Name": "UBotSensor",
+            "Enabled": true
+        }
+    ],
+    "Modules": [
+        {
+            "Name": "UBotROS",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ],
+    "UBot": {
+        "Layer": "Adapter",
+        "Repository": "https://github.com/AstreoX/uBotROS.git",
+        "Requires": [
+            {
+                "Name": "UBotCore",
+                "Version": "^0.1.0"
+            },
+            {
+                "Name": "UBotSensor",
+                "Version": "^0.1.0"
+            }
+        ],
+        "Provides": [
+            "ROS.SensorPublishing",
+            "ROS.TF",
+            "ROS.Clock",
+            "ROS.VelocityCommand"
+        ],
+        "Tags": [
+            "ros",
+            "ros2",
+            "adapter"
+        ]
+    }
+}
