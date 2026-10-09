@@ -19,7 +19,7 @@ setup(
     maintainer="AstreoX",
     maintainer_email="astreox@users.noreply.github.com",
     description="TCP bridge between the uBot UE plugin (UBotROS) and ROS 2.",
-    license="TODO",
+    license="Apache-2.0",
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [

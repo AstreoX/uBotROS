@@ -9,8 +9,7 @@
     subscribed topics (e.g. cmd_vel) back to UE.
   </description>
   <maintainer email="astreox@users.noreply.github.com">AstreoX</maintainer>
-  <!-- The uBot repositories do not declare a license yet. -->
-  <license>TODO</license>
+  <license>Apache-2.0</license>
   <url type="repository">https://github.com/AstreoX/uBotROS</url>
 
   <exec_depend>rclpy</exec_depend>

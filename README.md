@@ -508,6 +508,6 @@ UE 测试发布 IMU、点云、静态 TF 和 `/clock`，并订阅 `/ubot_e2e/cmd
 
 ## 版本与许可
 
-当前版本 **0.1.0**（Beta，`IsBetaVersion`）。作者 AstreoX，仓库 <https://github.com/AstreoX/uBotROS>。
+当前版本 **0.1.0**（Beta，`IsBetaVersion`），仓库 <https://github.com/AstreoX/uBotROS>。
 
-仓库目前没有 LICENSE 文件（`ubot_ros_bridge` 的 `package.xml` / `setup.py` 里的许可证字段也是 `TODO`），因此尚未给出明确的使用、修改和再分发许可；在补充许可证之前，请不要假定可以再分发。
+Copyright 2026 AstreoX。本项目以 [Apache License 2.0](LICENSE) 发布，可以自由使用、修改和再分发（包括商业用途），再分发时需保留 `LICENSE` 与 `NOTICE` 文件，并注明你修改过的文件。
