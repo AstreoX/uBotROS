@@ -19,6 +19,7 @@
 #include "UBotClock.h"
 #include "UBotROS.h"
 #include "UBotROSProtocol.h"
+#include "UBotROSRuntimeStatus.h"
 #include "UBotROSSettings.h"
 #include "UBotRosConventions.h"
 
@@ -1298,6 +1299,7 @@ void UUBotROSBridgeSubsystem::Deinitialize()
         Client.Reset();
     }
     Status = EUBotROSBridgeStatus::Disabled;
+    UBot::ROSRuntimeStatus::ClearBridgeStatus(this);
     Publishers.Empty();
     Subscriptions.Empty();
     StaticTransformOwners.Empty();
@@ -1720,7 +1722,12 @@ FString UUBotROSBridgeSubsystem::GetLastBridgeError() const
 
 FString UUBotROSBridgeSubsystem::GetBridgeEndpoint() const
 {
-    return bHasEndpoint ? FString::Printf(TEXT("%s:%d"), *EndpointHost, EndpointPort) : FString();
+    if (!bHasEndpoint)
+    {
+        return FString();
+    }
+    // An empty host (an invalid setting) would read as ":8268".
+    return FString::Printf(TEXT("%s:%d"), EndpointHost.IsEmpty() ? TEXT("(no host)") : *EndpointHost, EndpointPort);
 }
 
 FUBotROSBridgeStats UUBotROSBridgeSubsystem::GetStats() const
@@ -1752,7 +1759,15 @@ void UUBotROSBridgeSubsystem::StartClient(const FString& Host, int32 Port)
     if (TrimmedHost.IsEmpty() || Port < 1 || Port > 65535)
     {
         StopClient();
-        LastError = FString::Printf(TEXT("invalid bridge endpoint '%s:%d'"), *TrimmedHost, Port);
+
+        // The published status and the rosBridgeUnreachable problem name GetBridgeEndpoint(): it must be
+        // what was rejected, not the endpoint of an earlier session (or nothing at all). No client runs
+        // after StopClient(), so a later valid ConnectTo() is never mistaken for "already connected".
+        EndpointHost = TrimmedHost;
+        EndpointPort = Port;
+        bHasEndpoint = true;
+
+        LastError = FString::Printf(TEXT("invalid bridge endpoint '%s'"), *GetBridgeEndpoint());
         UE_LOG(LogUBotROS, Error, TEXT("uBot ROS bridge: %s."), *LastError);
         SetStatus(EUBotROSBridgeStatus::Error);
         return;
@@ -1953,6 +1968,7 @@ void UUBotROSBridgeSubsystem::HandleSessionEnded(const FString& Reason)
 void UUBotROSBridgeSubsystem::SetStatus(EUBotROSBridgeStatus NewStatus)
 {
     Status = NewStatus;
+    UBot::ROSRuntimeStatus::PublishBridgeStatus(this, Status, GetBridgeEndpoint());
 }
 
 void UUBotROSBridgeSubsystem::ResetSubscriberCounts()

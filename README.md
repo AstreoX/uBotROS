@@ -40,11 +40,11 @@ UBotROS 插件 ──TCP 8268──▶ ubot_ros_bridge (rclpy) ──▶ ROS 2 �
 
 UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.0` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
 
-| 包 | 层 | 作用 |
+| Package | 层 | 作用 |
 | --- | --- | --- |
 | `UBotCore` | Foundation | 帧头、仿真时钟 `UBot::Clock`、坐标 / 单位 / 时间约定 `UBot::Ros` 与 `UBot::Units`、身份组件、扩展注册表 |
 | `UBotSensor` | Capability | 位姿、里程计、IMU、2D / 3D 激光雷达、RGB / 深度相机 |
-| `UBotROS` | Adapter | 本插件：把上面两个包的数据翻译成 ROS 2 |
+| `UBotROS` | Adapter | 本插件：把上面两个 Package 的数据翻译成 ROS 2 |
 
 所有坐标、单位和时间换算都走 Core 的 `UBot::Ros` / `UBot::Units`，插件内没有自己的换算公式。`"UBot"` 块声明的能力键（`Provides`）：`ROS.SensorPublishing`、`ROS.TF`、`ROS.Clock`、`ROS.VelocityCommand`。引擎模块依赖：公有 `Core`、`CoreUObject`、`Engine`、`DeveloperSettings`，私有 `Sockets`、`Networking`、`Json`。
 
@@ -60,7 +60,7 @@ UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.0` 和 `UBo
    git clone https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBot/uBotROS
    ```
 
-   也可以用 uBotCore 的 **uBot Packages** 窗口（`Window` 菜单）安装，它会先装好缺失的依赖；命令行等价于 `UnrealEditor-Cmd.exe <Project>.uproject -run=UBotPackage -Install=UBotROS`。
+   也可以用 [uBot Manager](https://github.com/AstreoX/uBotManager) 安装：在 uBotCore 的 **uBot** 面板（`Window > uBot`）里点 *Open uBot Manager* 打开它，安装 UBotROS，或应用 Recipe “ROS 2 传感器”（`ros-sensors`）；缺失的依赖会一起装好。命令行等价于 `UnrealEditor-Cmd.exe <Project>.uproject -run=UBotPackage -Install=UBotROS`。
 
 2. 启用插件：在 `Edit > Plugins` 中搜索 uBot ROS（分类 uBot）并勾选，或在 `.uproject` 中加入
 
@@ -72,7 +72,17 @@ UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.0` 和 `UBo
    ]
    ```
 
-3. 重启编辑器。设置位于 `Project Settings > Plugins > uBot ROS`，保存在 `Config/DefaultEngine.ini` 的 `[/Script/UBotROS.UBotROSSettings]` 段。
+3. 重启编辑器。设置位于 `Project Settings > Plugins > uBot ROS`，保存在工程的 `Config/DefaultUBotROS.ini` 的 `[/Script/UBotROS.UBotROSSettings]` 段：
+
+   ```ini
+   [/Script/UBotROS.UBotROSSettings]
+   BridgeHost=127.0.0.1
+   BridgePort=8268
+   ```
+
+   uBot Manager 的 设置 > ROS 桥接 读写同一个文件里的 `BridgeHost` 和 `BridgePort`（只改这两行，其余内容不变；没有安装 UBotROS 的工程使用 uBot Manager 自己保存的值）。插件目录里自带的 `Config/DefaultUBotROS.ini` 只放 CoreRedirects，是另一个文件。
+
+   **从旧版本迁移**：早期版本把这些设置写在 `Config/DefaultEngine.ini`。现在设置类使用 `Config=UBotROS`，只读取 `DefaultUBotROS.ini`，`DefaultEngine.ini` 里的 `[/Script/UBotROS.UBotROSSettings]` 段不再生效，升级后设置会回到默认值。把整段从 `DefaultEngine.ini` 剪切到工程的 `Config/DefaultUBotROS.ini`，或在 Project Settings 里重新设置一遍（编辑器会写入新位置）。
 
 C++ 工程使用时，在自己模块的 `Build.cs` 中加入 `"UBotROS"`（以及用到的 `"UBotCore"`、`"UBotSensor"`）。
 
@@ -109,7 +119,7 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268
 1. **启动桥**（WSL 或 ROS 机器）：见上一节 A 方式。桥启动日志形如 `ubot_ros_bridge 0.1.0 listening on 0.0.0.0:8268 (ROS humble, ...)`。
 2. **在 UE 里搭机器人**：在同一个 Actor 上添加若干 uBot 传感器组件，再添加 **uBot ROS Sensor Bridge**。可选添加 **uBot Identity**（uBotCore）命名机器人，例如 `Namespace = robot1`；不加的话命名空间取净化后的 Actor 名。需要接收速度指令时再添加 **uBot ROS Velocity Command**。
 3. **检查项目设置**：`Project Settings > Plugins > uBot ROS`，默认的 `127.0.0.1:8268` 通常不用改。
-4. **Play（PIE 或 Game）**。`bAutoConnect` 开启时世界开始时自动连接，UE 日志（`LogUBotROS`）出现 `uBot ROS bridge: connected to 127.0.0.1:8268 (ubot_ros_bridge 0.1.0, ROS humble)` 和 `ROS sensor bridge '...' on '...' ready: namespace '/robot1', N sensor(s), M topic(s)`；桥日志里能看到 `advertised /robot1/imu/data [sensor_msgs/msg/Imu]` 之类的行。
+4. **Play（PIE 或 Game）**。`bAutoConnect` 开启时世界开始时自动连接，UE 日志（`LogUBotROS`）出现 `uBot ROS bridge: connected to 127.0.0.1:8268 (ubot_ros_bridge 0.1.0, ROS humble)` 和 `ROS sensor bridge '...' on '...' ready: namespace '/robot1', N sensor(s), M topic(s)`；桥日志里能看到 `advertised /robot1/imu/data [sensor_msgs/msg/Imu]` 之类的行。编辑器的 uBot 面板（`Window > uBot`）的 Runtime 分区里，ROS bridge 一项同时显示 `Connected · 127.0.0.1:8268`。
 5. **在 ROS 里查看**（已用桥和一个模拟 UE 的客户端验证过这些命令）：
 
    ```bash
@@ -155,6 +165,29 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268
 | `SensorDataQosOverride` / `StateQosOverride` | 不覆盖 | 覆盖传感器数据（默认 best_effort / volatile / 5）和状态（pose、odom，默认 reliable / volatile / 10）的 QoS |
 
 蓝图接口与旧版一致：`IsROSBridgeReady`、`GetROSBridgeStatus`（`Uninitialized` / `Initializing` / `Ready` / `Error` / `Stopped`）、`GetROSBridgeError`、`GetDiscoveredSensorCount`、`GetActivePublisherTopics`、`RefreshSensorPublishers`、`RestartROSBridge`、`StopROSBridge`，事件 `OnROSBridgeReady`、`OnROSBridgeError`、`OnROSPublishersRefreshed`；新增 `GetResolvedNamespace`、`GetResolvedBaseFrameId`。组件在发布器建好后就进入 `Ready`，**不等**桥连接成功：断开期间 best_effort 数据直接丢弃，reliable 数据排队，组件只在断开持续约 2 秒后记一条 Warning。
+
+## 运行时状态与问题
+
+桥的连接状态会发布到 UBotCore 的运行时状态（`FUBotRuntimeStatus`），uBot 面板和 uBot Manager 都从这里取得。每个 Game / PIE 世界各有一个桥子系统，但只有一个 `ros.bridge` 状态项和一个问题；同时有多个世界时，显示状态最好的那个（已连接，其次正在连接，其次失败，最后是已断开）。
+
+状态项 `ros.bridge`（标签 `ROS bridge`，中文界面 `ROS 桥接`；`detail` 是 `host:port`）：
+
+| 桥子系统状态 | `value` | 严重度 | 面板文字（英文 / 中文） | 何时 |
+| --- | --- | --- | --- | --- |
+| `Connecting` | `connecting` | Info | Connecting / 正在连接 | 开始连接 |
+| `Connected` | `connected` | Ok | Connected / 已连接 | 与桥握手完成 |
+| `Error` | `disconnected` | Warning | Disconnected / 已断开 | 一次连接尝试失败，或已建立的连接断开；之后每 `ReconnectIntervalSeconds` 重试 |
+| `Disabled` | `disconnected` | Info | Disconnected / 已断开 | 调用了 `Disconnect()` |
+
+一次连接尝试失败或连接断开时，还会报告问题 `rosBridgeUnreachable`（严重度 Info，参数 `address` 为 `host:port`，消息 `Could not connect to ubot_ros_bridge at <address>.`，中文界面 `无法连接 <address> 上的 ubot_ros_bridge。`）。连接成功或 `Disconnect()` 后，问题被清除。
+
+它们出现在这些地方：
+
+- **uBot 面板**（`Window > uBot`）：Runtime 分区显示状态项，Problems 分区显示问题。
+- **`<Project>/Saved/uBot/status.json`**：一次 PIE 或游戏运行结束时写入，运行结束时仍存在的问题会留在文件里（格式见 UBotCore 的 README“运行时状态”）。
+- **uBot Manager**：在 Problems 视图的“上次运行”范围里显示这个问题，快速修复是“打开 ROS 设置”，直接跳到 设置 > ROS 桥接 修改主机和端口，那里的“测试连接”会做一次 TCP 连接。uBot Manager 自己也会在刷新时检查（设置里的“刷新时检查桥接”，默认开）：UBotROS 已安装并启用时，对工程配置的地址做一次 2 秒的 TCP 连接，连不上就在 Package 范围里报告同一个问题。
+
+看到这个问题，先确认桥已经启动、地址和端口一致，WSL 和防火墙的注意事项见上文“WSL 与网络”。
 
 ## 话题与消息
 
@@ -432,7 +465,7 @@ void FMyRangeROSModule::ShutdownModule()
 
 ### CoreRedirects
 
-重定向列表**只有一份**：`Config/DefaultUBotROS.ini` 的 `[CoreRedirects]` 段，共 11 条。
+重定向列表**只有一份**：插件目录里 `Config/DefaultUBotROS.ini` 的 `[CoreRedirects]` 段，共 11 条（工程的 `Config/DefaultUBotROS.ini` 存放项目设置，是另一个文件）。
 
 | 类型 | 条数 | 内容 |
 | --- | --- | --- |
@@ -461,12 +494,12 @@ UE 与桥之间的 TCP 协议（UBRB v1）完整规范见 [`docs/PROTOCOL.md`](d
 
 ### UE 自动化测试
 
-测试名都以 `UBotROS.` 开头，共 72 项，分类为 `Cdr`（24，其中 `Cdr.Golden.*` 16 项）、`Convert`（15）、`Protocol`（4）、`Subsystem`（11）、`Factories`（3）、`SensorBridge`（3）、`VelocityCommand`（9）、`Redirects`（2）和 `EndToEnd`（1）：
+测试名都以 `UBotROS.` 开头，共 75 项，分类为 `Cdr`（24，其中 `Cdr.Golden.*` 16 项）、`Convert`（15）、`Protocol`（4）、`Subsystem`（14）、`Factories`（3）、`SensorBridge`（3）、`VelocityCommand`（9）、`Redirects`（2）和 `EndToEnd`（1）：
 
 - `Cdr.*`：基本类型、对齐、字符串、序列、数组、读取越界保护；`Cdr.Golden.*` 把 `FUBotRos*` 结构编码后与 `rclpy.serialization.serialize_message` 生成的字节逐字节比较（`Time`、`Header`、`Imu`、`Odometry`、`LaserScan`、`PointCloud2`、`Image`、`CameraInfo`、`TfMessage`、`Clock`、`Twist` 等），`Twist` 还做解码往返。参考数据由 `ros2/tools/gen_golden.py` 在 ROS 2 环境里生成到 `Private/Tests/UBotROSGoldenData.h`（rmw_fastrtps 不初始化对齐填充，生成器会标出哪些字节是填充）。
 - `Convert.*`：角速度符号、LaserScan 镜像（UE +30° 对应 ROS −30°）、PointCloud2 布局、协方差符号、Image / CameraInfo、光学系 TF、速度指令换算。
 - `Protocol.*`：帧构造、增量解析（拆包、粘包）、非法头部拒绝、名称校验。
-- `Subsystem.*`：对一个进程内的回环 TCP 测试服务器验证握手、声明与发布的帧格式、`SUB_COUNT`、`MESSAGE` 在游戏线程分发、队列策略、重连后重新声明、静态 TF 聚合、`/clock`、主机名解析。
+- `Subsystem.*`：对一个进程内的回环 TCP 测试服务器验证握手、声明与发布的帧格式、`SUB_COUNT`、`MESSAGE` 在游戏线程分发、队列策略、重连后重新声明、静态 TF 聚合、`/clock`、主机名解析，以及连接状态发布成运行时状态项和 `rosBridgeUnreachable` 问题（单个世界和多个世界）。
 - `Factories.*`、`SensorBridge.*`、`VelocityCommand.*`、`Redirects.*`：工厂选择与优先级、话题与 TF、配置校验、限速 / 超时 / 目标选择、CoreRedirects 与 QoS 迁移。
 - `EndToEnd.Bridge`：需要真实的桥，未设置环境变量 `UBOT_ROS_E2E=1` 时直接通过并输出一条提示。
 

@@ -14,9 +14,11 @@
 #include "UBotROSBridgeSubsystem.h"
 #include "UBotROSMessageTypes.h"
 #include "UBotROSProtocol.h"
+#include "UBotROSRuntimeStatus.h"
 #include "UBotROSSettings.h"
 #include "UBotROSTypes.h"
 #include "UBotRosConventions.h"
+#include "UBotRuntimeStatus.h"
 
 namespace UBotROSSubsystemTests
 {
@@ -1317,6 +1319,258 @@ bool FUBotROSSubsystemHostNameTest::RunTest(const FString& Parameters)
     Bridge->ConnectTo(TEXT("127.0.0.1"), Server.GetPort());
     TestTrue(*FString::Printf(TEXT("Switching endpoints during a name lookup is prompt (%.3f s)"), FPlatformTime::Seconds() - SwitchStart), FPlatformTime::Seconds() - SwitchStart < 0.6);
     TestTrue(TEXT("Connected to the new endpoint"), PumpUntil(Server, Bridge, [Bridge]() { return Bridge->IsBridgeConnected(); }));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSSubsystemRuntimeStatusTest, "UBotROS.Subsystem.RuntimeStatus", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotROSSubsystemRuntimeStatusTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSSubsystemTests;
+
+    const FString StatusId = TEXT("ros.bridge");
+    const FUBotRuntimeStatus& RuntimeStatus = FUBotRuntimeStatus::Get();
+
+    // A port nothing listens on any more.
+    int32 ClosedPort = 0;
+    {
+        FTestBridgeServer Probe;
+        if (!TestTrue(TEXT("Probe listener"), Probe.Start()))
+        {
+            return false;
+        }
+        ClosedPort = Probe.GetPort();
+    }
+    const FString ClosedEndpoint = FString::Printf(TEXT("127.0.0.1:%d"), ClosedPort);
+
+    {
+        FScopedBridgeWorld Scope;
+        UUBotROSBridgeSubsystem* Bridge = Scope.Bridge();
+        if (!TestNotNull(TEXT("Bridge subsystem"), Bridge))
+        {
+            return false;
+        }
+        TestNull(TEXT("Nothing is published before connecting"), RuntimeStatus.FindItem(StatusId));
+
+        AddExpectedErrorPlain(TEXT("cannot reach ubot_ros_bridge"), EAutomationExpectedErrorFlags::Contains, 1);
+        Bridge->ConnectTo(TEXT("127.0.0.1"), ClosedPort);
+        const FUBotRuntimeItem* Item = RuntimeStatus.FindItem(StatusId);
+        if (TestNotNull(TEXT("Connecting is published"), Item))
+        {
+            TestEqualSensitive(TEXT("Connecting value"), *Item->Value, TEXT("connecting"));
+            TestEqualSensitive(TEXT("Address as detail"), *Item->Detail, *ClosedEndpoint);
+            TestEqual(TEXT("Label"), Item->Label.BuildSourceString(), FString(TEXT("ROS bridge")));
+        }
+        TestNull(TEXT("No problem while the first attempt runs"), RuntimeStatus.FindProblem(StatusId));
+
+        FTestBridgeServer NoServer;
+        TestTrue(TEXT("The failed attempt reports rosBridgeUnreachable"),
+            PumpUntil(NoServer, Bridge, [&RuntimeStatus, &StatusId]() { return RuntimeStatus.FindProblem(StatusId) != nullptr; }));
+        if (const FUBotRuntimeProblem* Problem = RuntimeStatus.FindProblem(StatusId))
+        {
+            TestEqualSensitive(TEXT("Problem code"), *Problem->Code, TEXT("rosBridgeUnreachable"));
+            TestEqualSensitive(TEXT("Problem package"), *Problem->Package, TEXT("UBotROS"));
+            TestEqual(TEXT("Problem severity"), Problem->Severity, EUBotRuntimeSeverity::Info);
+            TestTrue(TEXT("Address parameter"), Problem->Params.Num() == 1 && Problem->Params[0].Key == TEXT("address") && Problem->Params[0].Value == ClosedEndpoint);
+            TestEqual(TEXT("Problem message"), Problem->Message.BuildSourceString(),
+                FString::Printf(TEXT("Could not connect to ubot_ros_bridge at %s."), *ClosedEndpoint));
+        }
+        Item = RuntimeStatus.FindItem(StatusId);
+        TestTrue(TEXT("Unreachable bridge is disconnected"), Item && Item->Value == TEXT("disconnected") && Item->Severity == EUBotRuntimeSeverity::Warning);
+
+        FTestBridgeServer Server;
+        if (!TestTrue(TEXT("Test bridge listens"), Server.Start()))
+        {
+            return false;
+        }
+        if (!ConnectBridge(*this, Server, Bridge))
+        {
+            return false;
+        }
+        Item = RuntimeStatus.FindItem(StatusId);
+        if (TestNotNull(TEXT("Connected is published"), Item))
+        {
+            TestEqualSensitive(TEXT("Connected value"), *Item->Value, TEXT("connected"));
+            TestEqual(TEXT("Connected severity"), Item->Severity, EUBotRuntimeSeverity::Ok);
+            TestEqualSensitive(TEXT("New address as detail"), *Item->Detail, *FString::Printf(TEXT("127.0.0.1:%d"), Server.GetPort()));
+        }
+        TestNull(TEXT("Connecting clears the problem"), RuntimeStatus.FindProblem(StatusId));
+
+        Bridge->Disconnect();
+        Item = RuntimeStatus.FindItem(StatusId);
+        TestTrue(TEXT("Disconnect() is published"), Item && Item->Value == TEXT("disconnected") && Item->Severity == EUBotRuntimeSeverity::Info);
+        TestNull(TEXT("A deliberate disconnect is not a problem"), RuntimeStatus.FindProblem(StatusId));
+    }
+
+    TestNull(TEXT("The item goes away with the world"), RuntimeStatus.FindItem(StatusId));
+    TestNull(TEXT("No problem outlives the world"), RuntimeStatus.FindProblem(StatusId));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSSubsystemInvalidEndpointStatusTest, "UBotROS.Subsystem.InvalidEndpointStatus", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotROSSubsystemInvalidEndpointStatusTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSSubsystemTests;
+
+    const FString StatusId = TEXT("ros.bridge");
+    const FUBotRuntimeStatus& RuntimeStatus = FUBotRuntimeStatus::Get();
+
+    FTestBridgeServer Server;
+    if (!TestTrue(TEXT("Test bridge listens"), Server.Start()))
+    {
+        return false;
+    }
+    FScopedBridgeWorld Scope;
+    UUBotROSBridgeSubsystem* Bridge = Scope.Bridge();
+    if (!TestNotNull(TEXT("Bridge subsystem"), Bridge) || !ConnectBridge(*this, Server, Bridge))
+    {
+        return false;
+    }
+    const FString PreviousEndpoint = Bridge->GetBridgeEndpoint();
+
+    // The report about a rejected endpoint must name that endpoint, not the one of the earlier session
+    // and not nothing ("Could not connect to ubot_ros_bridge at .").
+    struct FCase
+    {
+        const TCHAR* Host;
+        int32 Port;
+        const TCHAR* Address;
+    };
+    const FCase Cases[] =
+    {
+        { TEXT(""), 8268, TEXT("(no host):8268") },
+        { TEXT("   "), 8268, TEXT("(no host):8268") },
+        { TEXT("127.0.0.1"), 0, TEXT("127.0.0.1:0") },
+        { TEXT("127.0.0.1"), -1, TEXT("127.0.0.1:-1") },
+    };
+    AddExpectedErrorPlain(TEXT("invalid bridge endpoint"), EAutomationExpectedErrorFlags::Contains, static_cast<int32>(UE_ARRAY_COUNT(Cases)));
+
+    for (const FCase& Case : Cases)
+    {
+        const FString What = FString::Printf(TEXT("Host '%s', port %d"), Case.Host, Case.Port);
+        Bridge->ConnectTo(Case.Host, Case.Port);
+
+        TestEqual(*(What + TEXT(": status")), Bridge->GetBridgeStatus(), EUBotROSBridgeStatus::Error);
+        TestEqualSensitive(*(What + TEXT(": endpoint")), *Bridge->GetBridgeEndpoint(), Case.Address);
+        TestTrue(*(What + TEXT(": last error")), Bridge->GetLastBridgeError().Contains(Case.Address));
+
+        const FUBotRuntimeItem* Item = RuntimeStatus.FindItem(StatusId);
+        if (TestNotNull(*(What + TEXT(": item")), Item))
+        {
+            TestEqualSensitive(*(What + TEXT(": item address")), *Item->Detail, Case.Address);
+        }
+
+        const FUBotRuntimeProblem* Problem = RuntimeStatus.FindProblem(StatusId);
+        if (TestNotNull(*(What + TEXT(": problem")), Problem))
+        {
+            TestEqualSensitive(*(What + TEXT(": problem code")), *Problem->Code, TEXT("rosBridgeUnreachable"));
+            TestTrue(*(What + TEXT(": address parameter")), Problem->Params.Num() == 1 && Problem->Params[0].Key == TEXT("address") && Problem->Params[0].Value == Case.Address);
+            const FString Message = Problem->Message.BuildSourceString();
+            TestEqual(*(What + TEXT(": message")), Message, FString::Printf(TEXT("Could not connect to ubot_ros_bridge at %s."), Case.Address));
+            TestFalse(*(What + TEXT(": message has no address")), Message.EndsWith(TEXT("at .")));
+            TestFalse(*(What + TEXT(": message is not about the earlier endpoint")), Message.Contains(PreviousEndpoint));
+        }
+    }
+
+    // A valid endpoint replaces the report again.
+    TestTrue(TEXT("A valid endpoint connects after the rejected ones"), ConnectBridge(*this, Server, Bridge));
+    TestNull(TEXT("Connecting clears the problem"), RuntimeStatus.FindProblem(StatusId));
+    TestEqualSensitive(TEXT("The address is the new one again"), *Bridge->GetBridgeEndpoint(), *PreviousEndpoint);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSSubsystemSharedStatusTest, "UBotROS.Subsystem.RuntimeStatusPerWorld", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotROSSubsystemSharedStatusTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSSubsystemTests;
+
+    // There is one bridge subsystem per world (PIE with a listen server and clients has several) but one
+    // "ros.bridge" item and problem: a world that goes away must not erase what the others report.
+    const FString StatusId = TEXT("ros.bridge");
+    const FUBotRuntimeStatus& RuntimeStatus = FUBotRuntimeStatus::Get();
+
+    int32 ClosedPort = 0;
+    {
+        FTestBridgeServer Probe;
+        if (!TestTrue(TEXT("Probe listener"), Probe.Start()))
+        {
+            return false;
+        }
+        ClosedPort = Probe.GetPort();
+    }
+    FTestBridgeServer Server;
+    if (!TestTrue(TEXT("Test bridge listens"), Server.Start()))
+    {
+        return false;
+    }
+    const FString ServerEndpoint = FString::Printf(TEXT("127.0.0.1:%d"), Server.GetPort());
+
+    AddExpectedErrorPlain(TEXT("cannot reach ubot_ros_bridge"), EAutomationExpectedErrorFlags::Contains, 2);
+    {
+        FScopedBridgeWorld First;
+        UUBotROSBridgeSubsystem* FirstBridge = First.Bridge();
+        if (!TestNotNull(TEXT("First bridge subsystem"), FirstBridge) || !ConnectBridge(*this, Server, FirstBridge))
+        {
+            return false;
+        }
+        TestEqual(TEXT("One world publishes"), UBot::ROSRuntimeStatus::GetPublishingOwnerCount(), 1);
+
+        auto ExpectConnected = [this, &RuntimeStatus, &StatusId, &ServerEndpoint](const TCHAR* When)
+        {
+            const FUBotRuntimeItem* Item = RuntimeStatus.FindItem(StatusId);
+            if (TestNotNull(*FString::Printf(TEXT("%s: the item is still there"), When), Item))
+            {
+                TestEqualSensitive(*FString::Printf(TEXT("%s: it still says connected"), When), *Item->Value, TEXT("connected"));
+                TestEqualSensitive(*FString::Printf(TEXT("%s: it still shows the connected address"), When), *Item->Detail, *ServerEndpoint);
+            }
+            TestNull(*FString::Printf(TEXT("%s: no problem next to a connected bridge"), When), RuntimeStatus.FindProblem(StatusId));
+        };
+
+        // A second world that never connected publishes nothing, and its teardown withdraws nothing.
+        {
+            FScopedBridgeWorld Idle;
+            TestNotNull(TEXT("Idle bridge subsystem"), Idle.Bridge());
+        }
+        ExpectConnected(TEXT("After an idle world went away"));
+
+        // A second world whose bridge fails: the connected one decides what is shown, before and after.
+        {
+            FScopedBridgeWorld Failing;
+            UUBotROSBridgeSubsystem* FailingBridge = Failing.Bridge();
+            if (!TestNotNull(TEXT("Failing bridge subsystem"), FailingBridge))
+            {
+                return false;
+            }
+            FailingBridge->ConnectTo(TEXT("127.0.0.1"), ClosedPort);
+            TestTrue(TEXT("The second bridge fails"),
+                PumpUntil(Server, FailingBridge, [FailingBridge]() { return FailingBridge->GetBridgeStatus() == EUBotROSBridgeStatus::Error; }));
+            TestEqual(TEXT("Two worlds publish"), UBot::ROSRuntimeStatus::GetPublishingOwnerCount(), 2);
+            ExpectConnected(TEXT("While another world fails"));
+        }
+        TestEqual(TEXT("Only the first world is left"), UBot::ROSRuntimeStatus::GetPublishingOwnerCount(), 1);
+        ExpectConnected(TEXT("After the failing world went away"));
+
+        // Now the first world fails itself; an unrelated world coming and going must not clear that.
+        FirstBridge->ConnectTo(TEXT("127.0.0.1"), ClosedPort);
+        TestTrue(TEXT("The first bridge fails"), PumpUntil(Server, FirstBridge, [&RuntimeStatus, &StatusId]() { return RuntimeStatus.FindProblem(StatusId) != nullptr; }));
+        {
+            FScopedBridgeWorld Idle;
+            TestNotNull(TEXT("Second idle bridge subsystem"), Idle.Bridge());
+        }
+        const FUBotRuntimeProblem* Problem = RuntimeStatus.FindProblem(StatusId);
+        if (TestNotNull(TEXT("The problem survives an idle world"), Problem))
+        {
+            TestEqualSensitive(TEXT("It is still the unreachable bridge"), *Problem->Code, TEXT("rosBridgeUnreachable"));
+        }
+        const FUBotRuntimeItem* Item = RuntimeStatus.FindItem(StatusId);
+        TestTrue(TEXT("The failed bridge is still shown"), Item && Item->Value == TEXT("disconnected") && Item->Severity == EUBotRuntimeSeverity::Warning);
+    }
+
+    TestEqual(TEXT("No world publishes any more"), UBot::ROSRuntimeStatus::GetPublishingOwnerCount(), 0);
+    TestNull(TEXT("The item goes away with the last world"), RuntimeStatus.FindItem(StatusId));
+    TestNull(TEXT("No problem outlives the last world"), RuntimeStatus.FindProblem(StatusId));
     return true;
 }
 

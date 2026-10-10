@@ -182,7 +182,10 @@ public:
     UFUNCTION(BlueprintPure, Category = "uBot|ROS")
     FString GetLastBridgeError() const;
 
-    /** "host:port" this subsystem connects (or last connected) to; empty when never connected. */
+    /**
+     * "host:port" this subsystem connects (or last connected) to; empty when never connected. After
+     * ConnectTo() rejected an invalid endpoint it is the rejected one, with "(no host)" for an empty host.
+     */
     UFUNCTION(BlueprintPure, Category = "uBot|ROS")
     FString GetBridgeEndpoint() const;
 

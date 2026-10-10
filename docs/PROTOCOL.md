@@ -379,7 +379,7 @@ make the receiver reserve 64 MiB.
 
 | item | value |
 |---|---|
-| settings | Project Settings > Plugins > uBot ROS (`UUBotROSSettings`, `DefaultEngine.ini`): `BridgeHost` 127.0.0.1, `BridgePort` 8268, `bAutoConnect` true, `ReconnectIntervalSeconds` 2, `bPublishClock` true, `ClockTopic` `/clock`, `MaxPayloadBytes` 64 MiB, `MaxQueuedBytes` 256 MiB (raised to `MaxPayloadBytes` + 12 when smaller, with a warning) |
+| settings | Project Settings > Plugins > uBot ROS (`UUBotROSSettings`, project `Config/DefaultUBotROS.ini`): `BridgeHost` 127.0.0.1, `BridgePort` 8268, `bAutoConnect` true, `ReconnectIntervalSeconds` 2, `bPublishClock` true, `ClockTopic` `/clock`, `MaxPayloadBytes` 64 MiB, `MaxQueuedBytes` 256 MiB (raised to `MaxPayloadBytes` + 12 when smaller, with a warning) |
 | connection | one per game/PIE world, `UUBotROSBridgeSubsystem`, background I/O thread, status `Disabled` / `Connecting` / `Connected` / `Error` |
 | timers | PING every 2 s, idle timeout 10 s, connect timeout 3 s, reconnect every `ReconnectIntervalSeconds` |
 | host name | an IP literal is used as is; any other `BridgeHost` is resolved on a thread-pool thread (never on the I/O thread), the result is reused for reconnects until an attempt fails |

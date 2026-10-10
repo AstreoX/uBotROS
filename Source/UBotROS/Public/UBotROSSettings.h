@@ -5,10 +5,12 @@
 #include "UBotROSSettings.generated.h"
 
 /**
- * Project settings for uBot ROS (Project Settings > Plugins > uBot ROS, stored in DefaultEngine.ini).
- * Read when a world's bridge subsystem connects; changes apply on the next Connect().
+ * Project settings for uBot ROS (Project Settings > Plugins > uBot ROS), stored in the project's
+ * Config/DefaultUBotROS.ini, section [/Script/UBotROS.UBotROSSettings], where uBot Manager edits
+ * BridgeHost and BridgePort too. Read when a world's bridge subsystem connects; changes apply on the
+ * next Connect().
  */
-UCLASS(Config = Engine, DefaultConfig, meta = (DisplayName = "uBot ROS"))
+UCLASS(Config = UBotROS, DefaultConfig, meta = (DisplayName = "uBot ROS"))
 class UBOTROS_API UUBotROSSettings : public UDeveloperSettings
 {
     GENERATED_BODY()

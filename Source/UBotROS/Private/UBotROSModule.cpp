@@ -3,12 +3,15 @@
 #include "Modules/ModuleManager.h"
 #include "UBotExtensionRegistry.h"
 #include "UBotROSBuiltinPublishers.h"
+#include "UBotROSRuntimeStatus.h"
 #include "UBotROSSensorPublisher.h"
 
 DEFINE_LOG_CATEGORY(LogUBotROS);
 
 void FUBotROSModule::StartupModule()
 {
+    UBot::ROSRuntimeStatus::RegisterLocalizedText();
+
     FUBotExtensionRegistry& Registry = FUBotExtensionRegistry::Get();
     const FName OwnerPackage(UBot::ROSPublishing::OwnerPackageName);
 
