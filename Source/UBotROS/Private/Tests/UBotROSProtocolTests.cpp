@@ -2,6 +2,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "UBotPackageLibrary.h"
 #include "UBotROSProtocol.h"
 #include "UBotROSTypes.h"
 
@@ -135,6 +136,7 @@ bool FUBotROSProtocolFrameBuildTest::RunTest(const FString& Parameters)
 
     // JSON payloads are compact UTF-8 with exactly the contract's field names.
     TestEqualSensitive(TEXT("Client name"), DefaultClientName(), FString(TEXT("uBot UE ")) + ClientVersion);
+    TestEqualSensitive(TEXT("HELLO reports the VersionName of UBotROS.uplugin"), FString(ClientVersion), UUBotPackageLibrary::GetUBotPackageVersion(TEXT("UBotROS")));
     TestEqualSensitive(TEXT("HELLO json"), MakeHelloJson(TEXT("uBot UE 0.1.0")), FString(TEXT("{\"protocol\":1,\"client\":\"uBot UE 0.1.0\"}")));
     const TArray<uint8> Hello = BuildJsonFrame(EOp::Hello, MakeHelloJson(TEXT("uBot UE 0.1.0")));
     const FString HelloJson = TEXT("{\"protocol\":1,\"client\":\"uBot UE 0.1.0\"}");

@@ -129,7 +129,7 @@ UE plugin uses:
 ### 5.1 HELLO / HELLO_ACK — handshake
 
 - The client sends `HELLO` as the **first frame** of every connection:
-  `{"protocol":1,"client":"uBot UE 0.1.0"}`.
+  `{"protocol":1,"client":"uBot UE 0.1.1"}`.
 - The bridge answers `HELLO_ACK`:
   `{"protocol":1,"server":"ubot_ros_bridge 0.1.0","ros_distro":"humble"}` (`ros_distro` from
   `$ROS_DISTRO`, `"unknown"` if unset).
@@ -311,7 +311,7 @@ wrapped here for readability but travel as one compact UTF-8 line (the byte coun
 
 ```
 C→S HELLO        55 42 52 42 01 01 00 00 27 00 00 00
-                 {"protocol":1,"client":"uBot UE 0.1.0"}                      (39 bytes)
+                 {"protocol":1,"client":"uBot UE 0.1.1"}                      (39 bytes)
 C→S ADVERTISE    55 42 52 42 01 03 00 00 7e 00 00 00
                  {"id":3,"topic":"/clock","type":"rosgraph_msgs/msg/Clock",
                   "qos":{"reliability":"reliable","durability":"volatile","depth":10}}   (126 bytes)

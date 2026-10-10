@@ -34,7 +34,7 @@ namespace UBot::ROSProtocol
     /** A peer that has not received any frame for this long drops the connection. */
     inline constexpr double IdleTimeoutSeconds = 10.0;
     /** Version reported in HELLO ("uBot UE <version>"); keep in sync with UBotROS.uplugin VersionName. */
-    inline constexpr const TCHAR* ClientVersion = TEXT("0.1.0");
+    inline constexpr const TCHAR* ClientVersion = TEXT("0.1.1");
 
     enum class EOp : uint8
     {
