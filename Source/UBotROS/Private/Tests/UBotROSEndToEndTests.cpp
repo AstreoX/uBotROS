@@ -22,7 +22,7 @@
 #include "UBotSensorTypes.h"
 #include "UBotTypes.h"
 
-// End-to-end check against a real ubot_ros_bridge (contract section 11 / section 12 fixture). The ROS side
+// End-to-end check against a real ubot_ros_bridge. The ROS side
 // is ros2/ubot_ros_bridge/test/e2e_check.py, which verifies what this test publishes and publishes the
 // cmd_vel Twist this test waits for. Run it with:
 //   WSL:  source /opt/ros/humble/setup.bash

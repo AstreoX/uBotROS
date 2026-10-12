@@ -7,7 +7,7 @@ Start the bridge, run this script, then run the UE test with ``UBOT_ROS_E2E=1``
     source /opt/ros/humble/setup.bash
     python3 test/e2e_check.py [--timeout 30]
 
-It subscribes to the fixture topics under ``/ubot_e2e`` (contract section 12)
+It subscribes to the fixture topics under ``/ubot_e2e``
 and publishes ``geometry_msgs/msg/Twist`` on ``/ubot_e2e/cmd_vel`` at 10 Hz
 (linear 1.5, 0, 0; angular 0, 0, 0.25) for the UE side to receive.
 

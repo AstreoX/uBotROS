@@ -76,7 +76,7 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268 bind_address:=0
 
 ## 协议要点
 
-完整规范见插件仓库的 `docs/PROTOCOL.md`（与契约 `ros-contract.md` 第 2 节一致）。每帧格式：
+完整规范见插件仓库的 `docs/PROTOCOL.md`。每帧格式：
 
 | 偏移 | 长度 | 字段 |
 | --- | --- | --- |

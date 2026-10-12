@@ -12,7 +12,7 @@ class UUBotImageFrame;
 class UUBotPointCloudFrame;
 
 /**
- * uBot data -> ROS 2 message structs (ros-contract section 6), and ROS cmd_vel -> uBot velocity command.
+ * uBot data -> ROS 2 message structs, and ROS cmd_vel -> uBot velocity command.
  *
  * Pure functions without I/O or global state. Frame ids are resolved by the caller (namespace prefix,
  * optical suffix, overrides); the converters never read frame ids out of the uBot data. Every coordinate,
