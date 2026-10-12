@@ -2,7 +2,7 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>ubot_ros_bridge</name>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <description>
     ROS 2 side of the uBot UE plugin UBotROS: a small TCP server (wire protocol v1) that
     publishes the CDR messages streamed by Unreal Engine unchanged with rclpy and forwards
@@ -24,6 +24,9 @@
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>tf2_msgs</exec_depend>
   <exec_depend>rosgraph_msgs</exec_depend>
+  <!-- Flight commands (uBot ROS Attitude Command, uBot ROS Motor Command). -->
+  <exec_depend>mavros_msgs</exec_depend>
+  <exec_depend>actuator_msgs</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

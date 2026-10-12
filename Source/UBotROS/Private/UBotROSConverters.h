@@ -108,4 +108,21 @@ namespace UBot::ROSConvert
      * angular via AngularVelocityROSToUE (ROS angular.z = +1 -> UE Z = -1), Source "ROS". No clamping.
      */
     FUBotVelocityCommand MakeVelocityCommand(const FUBotRosTwist& Twist, double TimestampSeconds);
+
+    /**
+     * mavros_msgs/AttitudeTarget -> an attitude command (IGNORE_ATTITUDE clear: orientation from the ROS world
+     * frame to UE through UBot::Ros::RotationROSToUE; body_rate is not used) or a body-rate command
+     * (IGNORE_ATTITUDE set: body_rate FLU -> UE through AngularVelocityROSToUE, ignored axes 0). Thrust
+     * (clamped to 0..1) is used unless IGNORE_THRUST is set; without it the vehicle holds its altitude.
+     * Returns false with OutError for non-finite values or an orientation that is not a rotation.
+     */
+    bool MakeAttitudeTargetCommand(const FUBotRosAttitudeTarget& Target, double TimestampSeconds, bool& bOutBodyRate,
+        FUBotAttitudeCommand& OutAttitude, FUBotBodyRateCommand& OutBodyRate, FString* OutError = nullptr);
+
+    /**
+     * actuator_msgs/Actuators -> a motor command: velocity[] (rad/s, negative values count as 0) when present,
+     * else normalized[] (clamped to 0..1); position[] is not used. Returns false with OutError when neither is
+     * set or a value is not finite.
+     */
+    bool MakeMotorCommand(const FUBotRosActuators& Actuators, double TimestampSeconds, FUBotMotorCommand& OutCommand, FString* OutError = nullptr);
 }

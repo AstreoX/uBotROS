@@ -16,6 +16,9 @@
 #include "UBotROSBridgeSubsystem.h"
 #include "UBotROSConverters.h"
 #include "UBotROSMessageTypes.h"
+#include "UBotROSAttitudeCommandComponent.h"
+#include "UBotROSFlightCommandTestTypes.h"
+#include "UBotROSMotorCommandComponent.h"
 #include "UBotROSSettings.h"
 #include "UBotROSTypes.h"
 #include "UBotRosConventions.h"
@@ -469,6 +472,75 @@ bool FUBotROSEndToEndBridgeTest::RunTest(const FString& Parameters)
     TestTrue(TEXT("The bridge connected"), ConnectedAfterSeconds >= 0.0);
     TestEqual(TEXT("No publish was refused"), RefusedPublishes, 0);
     TestEqual(TEXT("Every cmd_vel message decoded"), CommandState->UndecodableMessages, 0);
+    return true;
+}
+
+// Flight commands through a real ubot_ros_bridge: the attitude and motor command components subscribe, and ROS
+// publishes from the command line. The bridge needs mavros_msgs and actuator_msgs. Run it with:
+//   WSL:  source /opt/ros/humble/setup.bash
+//         cd ros2/ubot_ros_bridge && python3 -m ubot_ros_bridge.bridge_node --port 8268 &
+//         ros2 topic pub -r 10 /ubot_e2e/cmd_attitude mavros_msgs/msg/AttitudeTarget "{orientation: {z: 0.7071067811865476, w: 0.7071067811865476}, thrust: 0.6}" &
+//         ros2 topic pub -r 10 /ubot_e2e/cmd_motors actuator_msgs/msg/Actuators "{velocity: [800.0, 805.0, 810.0, 815.0]}"
+//   UE:   set UBOT_ROS_E2E_FLIGHT=1, then Automation RunTests UBotROS.EndToEnd.FlightCommands
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSEndToEndFlightCommandsTest, "UBotROS.EndToEnd.FlightCommands", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotROSEndToEndFlightCommandsTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSEndToEndTests;
+    const TCHAR* const FlightVariable = TEXT("UBOT_ROS_E2E_FLIGHT");
+    if (FPlatformMisc::GetEnvironmentVariable(FlightVariable).TrimStartAndEnd() != TEXT("1"))
+    {
+        const FString Message = FString::Printf(TEXT("UBotROS.EndToEnd.FlightCommands skipped: set %s=1, start ubot_ros_bridge (port %d) and publish the commands in WSL to run it."),
+            FlightVariable, BridgePort);
+        UE_LOG(LogUBotROS, Display, TEXT("%s"), *Message);
+        AddInfo(Message);
+        return true;
+    }
+
+    FScopedE2ESettings Settings;
+    FScopedE2EWorld Scope;
+    UWorld* World = Scope.Get();
+    UUBotROSBridgeSubsystem* Bridge = World ? UUBotROSBridgeSubsystem::Get(World) : nullptr;
+    if (!TestNotNull(TEXT("uBot ROS bridge subsystem of the game world"), Bridge))
+    {
+        return false;
+    }
+
+    AActor* Vehicle = World->SpawnActor<AActor>();
+    UUBotROSFlightCommandTestTarget* Target = NewObject<UUBotROSFlightCommandTestTarget>(Vehicle, TEXT("Vehicle"));
+    Target->RegisterComponent();
+    UUBotROSAttitudeCommandComponent* Attitude = NewObject<UUBotROSAttitudeCommandComponent>(Vehicle, TEXT("Attitude"));
+    Attitude->CommandTopicOverride = TEXT("/ubot_e2e/cmd_attitude");
+    Attitude->RegisterComponent();
+    UUBotROSMotorCommandComponent* Motors = NewObject<UUBotROSMotorCommandComponent>(Vehicle, TEXT("Motors"));
+    Motors->CommandTopicOverride = TEXT("/ubot_e2e/cmd_motors");
+    Motors->RegisterComponent();
+    Vehicle->DispatchBeginPlay();
+    TestTrue(TEXT("Attitude receiver subscribed"), Attitude->GetResolvedCommandTopic() == TEXT("/ubot_e2e/cmd_attitude"));
+
+    Bridge->ConnectTo(BridgeHost, BridgePort);
+    const double StartSeconds = FPlatformTime::Seconds();
+    double LastTickSeconds = StartSeconds;
+    while (FPlatformTime::Seconds() - StartSeconds < TimeoutSeconds
+        && (Target->Attitudes.IsEmpty() || Target->MotorCommands.IsEmpty()))
+    {
+        const double NowSeconds = FPlatformTime::Seconds();
+        Scope.Tick(static_cast<float>(FMath::Clamp(NowSeconds - LastTickSeconds, 0.001, 0.1)));
+        LastTickSeconds = NowSeconds;
+        FPlatformProcess::Sleep(LoopSleepSeconds);
+    }
+
+    if (!TestTrue(FString::Printf(TEXT("An attitude command arrived (bridge error '%s', receiver error '%s')"), *Bridge->GetLastBridgeError(), *Attitude->GetCommandError()),
+            !Target->Attitudes.IsEmpty())
+        || !TestTrue(FString::Printf(TEXT("A motor command arrived (receiver error '%s')"), *Motors->GetCommandError()), !Target->MotorCommands.IsEmpty()))
+    {
+        return false;
+    }
+    // ROS yaw +90 degrees (nose to the left) is the nose along UE -Y.
+    TestTrue(TEXT("Attitude converted"), Target->Attitudes.Last().Orientation.GetAxisX().Equals(FVector(0.0, -1.0, 0.0), 1e-6));
+    TestEqual(TEXT("Thrust"), Target->Attitudes.Last().NormalizedThrust, 0.6, 1e-6);
+    TestTrue(TEXT("Motor speeds"), Target->MotorCommands.Last().Values == TArray<double>({ 800.0, 805.0, 810.0, 815.0 }));
+    TestEqual(TEXT("Motor command type"), Target->MotorCommands.Last().Type, EUBotMotorCommandType::AngularVelocity);
     return true;
 }
 

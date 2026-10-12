@@ -17,10 +17,12 @@ Config/DefaultUBotROS.ini  plugin CoreRedirects (project settings go to the host
 Config/FilterPlugin.ini    extra files staged with the plugin
 Source/UBotROS/            single Runtime module UBotROS (no editor module), log category LogUBotROS
   Public/                  exported API: UBotROSBridgeSubsystem.h, UBotROSSensorBridgeComponent.h,
-                           UBotROSVelocityCommandComponent.h, UBotROSSensorPublisher.h, UBotROSSettings.h,
-                           UBotROSTypes.h, UBotROSMessageTypes.h, UBotCdr.h
+                           UBotROSVelocityCommandComponent.h, UBotROSCommandReceiverComponent.h,
+                           UBotROSAttitudeCommandComponent.h, UBotROSMotorCommandComponent.h,
+                           UBotROSSensorPublisher.h, UBotROSSettings.h, UBotROSTypes.h,
+                           UBotROSMessageTypes.h, UBotCdr.h
   Private/                 UBotROSProtocol.*, UBotROSBridgeSubsystem.cpp, UBotROSConverters.*,
-                           UBotROSBuiltinPublishers.*, UBotROSRuntimeStatus.*
+                           UBotROSBuiltinPublishers.*, UBotROSFlightCommandComponents.cpp, UBotROSRuntimeStatus.*
   Private/Tests/           *Tests.cpp automation tests, UBotROSGoldenData.h (generated)
 ros2/ubot_ros_bridge/      ament_python package: ubot_ros_bridge/{protocol,bridge_node}.py, launch/, test/
 ros2/tools/gen_golden.py   generates Private/Tests/UBotROSGoldenData.h
@@ -53,6 +55,8 @@ Topics without a leading slash are relative to `/<namespace>/`; with several sen
 | `/tf`, `/tf_static` | `tf2_msgs/msg/TFMessage` | out | `MakeTransform`, `MakeOpticalTransform` | `UBotROSSensorBridgeComponent.cpp`; static set merged in `UUBotROSBridgeSubsystem::SetStaticTransforms` |
 | `/clock` (`ClockTopic`) | `rosgraph_msgs/msg/Clock` | out | none | `UpdateClock` in `UBotROSBridgeSubsystem.cpp` |
 | `cmd_vel` | `geometry_msgs/msg/Twist` | in | `MakeVelocityCommand` | `UUBotROSVelocityCommandComponent` |
+| `cmd_attitude` | `mavros_msgs/msg/AttitudeTarget` | in | `MakeAttitudeTargetCommand` | `UUBotROSAttitudeCommandComponent` |
+| `cmd_motors` | `actuator_msgs/msg/Actuators` | in | `MakeMotorCommand` | `UUBotROSMotorCommandComponent` |
 
 Publishers live in `Private/UBotROSBuiltinPublishers.{h,cpp}`; message structs in `Public/UBotROSMessageTypes.h`.
 
@@ -63,7 +67,7 @@ Add a sensor mapping (steps follow the existing ones):
 4. Add `UUBotROS<Name>Publisher : UUBotROSSensorPublisher`: `Initialize` calls `AdvertiseTopic(...)` and binds the sensor delegate; the handler checks `ShouldPublishSample` and `WantsMessage`, then `PublishMessage`. Register a `TUBotROSBuiltinPublisherFactory<Sensor, Publisher>` in `RegisterBuiltinFactories` and add its name to `GetBuiltinFactoryNames`; update `UBotROS.Factories.BuiltinCoverage` (it asserts the factory count).
 5. Update the topic tables in `README.md`. A new message package also needs an `<exec_depend>` in `ros2/ubot_ros_bridge/package.xml`; the bridge itself needs no per-type code.
 
-For ROS to UE, follow `UUBotROSVelocityCommandComponent`: `Bridge->Subscribe(topic, Type::TypeName(), qos, callback)`, `UBot::Ros::Decode`, a `*ROSToUE` converter. Third-party sensors register an `IUBotROSSensorPublisherFactory` at extension point `UBotROS.SensorPublisher` instead.
+For ROS to UE, derive from `UUBotROSCommandReceiverComponent` (subscription, topic and target resolution, timeout and error reporting; the attitude and motor command components in `Private/UBotROSFlightCommandComponents.cpp` are the examples): implement the topic leaf, message type, target interface, `HandlePayload` (`UBot::Ros::Decode`, a converter) and `ReleaseTarget`. `UUBotROSVelocityCommandComponent` predates the base class and keeps its own copy of that logic. Third-party sensors register an `IUBotROSSensorPublisherFactory` at extension point `UBotROS.SensorPublisher` instead.
 
 ## 5. Coordinates, units, time
 
@@ -97,6 +101,7 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268
 # bridge tests: from ros2/ubot_ros_bridge, ROS 2 sourced (loopback and in-process tests skip without it)
 python3 -m pytest -q test
 # regenerate golden CDR data: from the repo root, ROS 2 sourced
+# (needs ros-humble-mavros-msgs and ros-humble-actuator-msgs for the flight command cases)
 python3 ros2/tools/gen_golden.py --output Source/UBotROS/Private/Tests/UBotROSGoldenData.h
 ```
 

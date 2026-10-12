@@ -452,3 +452,39 @@ bool FUBotRosClock::Deserialize(FUBotCdrReader& Reader)
     clock.Deserialize(Reader);
     return Reader.IsOk();
 }
+
+void FUBotRosAttitudeTarget::Serialize(FUBotCdrWriter& Writer) const
+{
+    header.Serialize(Writer);
+    Writer.WriteU8(type_mask);
+    orientation.Serialize(Writer);
+    body_rate.Serialize(Writer);
+    Writer.WriteF32(thrust);
+}
+
+bool FUBotRosAttitudeTarget::Deserialize(FUBotCdrReader& Reader)
+{
+    header.Deserialize(Reader);
+    Reader.ReadU8(type_mask);
+    orientation.Deserialize(Reader);
+    body_rate.Deserialize(Reader);
+    Reader.ReadF32(thrust);
+    return Reader.IsOk();
+}
+
+void FUBotRosActuators::Serialize(FUBotCdrWriter& Writer) const
+{
+    header.Serialize(Writer);
+    Writer.WriteF64Sequence(position);
+    Writer.WriteF64Sequence(velocity);
+    Writer.WriteF64Sequence(normalized);
+}
+
+bool FUBotRosActuators::Deserialize(FUBotCdrReader& Reader)
+{
+    header.Deserialize(Reader);
+    Reader.ReadF64Sequence(position);
+    Reader.ReadF64Sequence(velocity);
+    Reader.ReadF64Sequence(normalized);
+    return Reader.IsOk();
+}

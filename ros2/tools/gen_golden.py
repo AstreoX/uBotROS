@@ -5,7 +5,8 @@ Every case below is serialized with rclpy.serialization.serialize_message, i.e. 
 middleware itself, and written as uint8 arrays into a C++ header. The UE tests build the very same
 messages with the FUBotRos* structs and require byte-for-byte equality.
 
-Run it in a ROS 2 Humble environment (no colcon build needed):
+Run it in a ROS 2 Humble environment (no colcon build needed) that also has the mavros_msgs and
+actuator_msgs packages (ros-humble-mavros-msgs, ros-humble-actuator-msgs):
 
     source /opt/ros/humble/setup.bash
     python3 gen_golden.py --output ../../Source/UBotROS/Private/Tests/UBotROSGoldenData.h
@@ -31,6 +32,7 @@ import struct
 import sys
 from typing import Any, Callable, Dict, List, Sequence, Tuple
 
+from actuator_msgs.msg import Actuators
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import Pose
 from geometry_msgs.msg import PoseStamped
@@ -38,6 +40,7 @@ from geometry_msgs.msg import Quaternion
 from geometry_msgs.msg import TransformStamped
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Vector3
+from mavros_msgs.msg import AttitudeTarget
 from nav_msgs.msg import Odometry
 from rclpy.serialization import deserialize_message
 from rclpy.serialization import serialize_message
@@ -394,6 +397,26 @@ def case_twist() -> Any:
     return message
 
 
+def case_attitude_target() -> Any:
+    message = AttitudeTarget()
+    message.header = make_header(3, 250000000, 'map')
+    message.type_mask = AttitudeTarget.IGNORE_ROLL_RATE | AttitudeTarget.IGNORE_PITCH_RATE
+    message.orientation = make_quaternion(0.1, -0.2, 0.3, 0.9)
+    message.body_rate = make_vector3(0.5, -0.25, 1.5)
+    message.thrust = 0.625
+    return message
+
+
+def case_actuators() -> Any:
+    # No empty float64 sequence: rmw_fastrtps over-estimates the size of those.
+    message = Actuators()
+    message.header = make_header(7, 5, 'base_link')
+    message.position = [0.5]
+    message.velocity = [800.0, 810.5, 0.0, 795.25]
+    message.normalized = [0.25, 0.5, 0.75, 1.0]
+    return message
+
+
 # (C++ array name, description, factory). The order is the order in the generated header.
 CASES: Sequence[Tuple[str, str, Callable[[], Any]]] = (
     ('Time',
@@ -444,6 +467,12 @@ CASES: Sequence[Tuple[str, str, Callable[[], Any]]] = (
     ('Twist',
      'geometry_msgs/msg/Twist',
      case_twist),
+    ('AttitudeTarget',
+     "mavros_msgs/msg/AttitudeTarget (type_mask 3, frame 'map')",
+     case_attitude_target),
+    ('Actuators',
+     "actuator_msgs/msg/Actuators (1 position, 4 velocities, 4 normalized, frame 'base_link')",
+     case_actuators),
 )
 
 

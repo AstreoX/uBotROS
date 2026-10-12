@@ -1,6 +1,8 @@
 #include "CoreMinimal.h"
 #include "Misc/AutomationTest.h"
 
+#include <limits>
+
 #if WITH_DEV_AUTOMATION_TESTS
 
 #include "Components/BoxComponent.h"
@@ -942,6 +944,102 @@ bool FUBotROSConvertVelocityCommandTest::RunTest(const FString& Parameters)
     // Mapping back with the UE -> ROS conventions restores the twist.
     TestEqual(TEXT("Linear round trip"), UBot::Ros::VectorUEToROS(Command.LinearVelocityMetersPerSecond), FVector(1.5, 1.0, 0.25), 1.e-9f);
     TestEqual(TEXT("Angular round trip"), UBot::Ros::AngularVelocityUEToROS(Command.AngularVelocityRadiansPerSecond), FVector(0.1, 0.2, 1.0), 1.e-9f);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSConvertAttitudeTargetTest, "UBotROS.Convert.AttitudeTarget", UBotROSConverterTests::TestFlags)
+
+bool FUBotROSConvertAttitudeTargetTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSConverterTests;
+    bool bBodyRate = true;
+    FUBotAttitudeCommand Attitude;
+    FUBotBodyRateCommand Rates;
+
+    // Attitude: yaw +90 degrees in ROS (nose to the left, +Y) is the nose along UE -Y.
+    FUBotRosAttitudeTarget Target;
+    const FQuat RosYawLeft(FVector::UpVector, UE_DOUBLE_HALF_PI);
+    Target.orientation = FUBotRosQuaternion::FromQuat(RosYawLeft);
+    Target.body_rate.z = 3.0;
+    Target.thrust = 0.75f;
+    TestTrue(TEXT("Attitude converts"), UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 2.0, bBodyRate, Attitude, Rates));
+    TestFalse(TEXT("Attitude, not body rate"), bBodyRate);
+    TestTrue(FString::Printf(TEXT("Nose along UE -Y (%s)"), *Attitude.Orientation.GetAxisX().ToString()), Attitude.Orientation.GetAxisX().Equals(FVector(0.0, -1.0, 0.0), 1e-9));
+    TestTrue(TEXT("Thrust used"), Attitude.bUseThrust);
+    TestEqual(TEXT("Thrust"), Attitude.NormalizedThrust, 0.75, 1e-9);
+    TestFalse(TEXT("Body rate fields do not turn the heading"), Attitude.bUseYawRate);
+    TestEqual(TEXT("Timestamp"), Attitude.TimestampSeconds, 2.0, 0.0);
+    TestTrue(TEXT("Source is ROS"), Attitude.Source == FName(TEXT("ROS")));
+
+    // Any rotation goes through the uBotCore conventions.
+    Target.orientation = FUBotRosQuaternion::FromQuat(FQuat(FVector::ForwardVector, 0.3));
+    UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 0.0, bBodyRate, Attitude, Rates);
+    TestTrue(TEXT("Rotation through RotationROSToUE"), Attitude.Orientation.Equals(UBot::Ros::RotationROSToUE(FQuat(FVector::ForwardVector, 0.3)), 1e-12));
+
+    // Without thrust the vehicle holds its altitude; thrust is clamped.
+    Target.type_mask = FUBotRosAttitudeTarget::IGNORE_THRUST;
+    UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 0.0, bBodyRate, Attitude, Rates);
+    TestFalse(TEXT("IGNORE_THRUST: no thrust"), Attitude.bUseThrust);
+    TestEqual(TEXT("IGNORE_THRUST: hold altitude"), Attitude.VerticalVelocityMetersPerSecond, 0.0);
+    Target.type_mask = 0;
+    Target.thrust = 1.5f;
+    UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 0.0, bBodyRate, Attitude, Rates);
+    TestEqual(TEXT("Thrust clamped to 1"), Attitude.NormalizedThrust, 1.0, 0.0);
+
+    // Body rates: FLU -> UE (-x, y, -z); ignored axes are 0.
+    Target.type_mask = FUBotRosAttitudeTarget::IGNORE_ATTITUDE | FUBotRosAttitudeTarget::IGNORE_PITCH_RATE;
+    Target.body_rate = FUBotRosVector3::FromVector(FVector(0.5, 0.25, 1.0));
+    Target.thrust = 0.5f;
+    TestTrue(TEXT("Body rate converts"), UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 0.0, bBodyRate, Attitude, Rates));
+    TestTrue(TEXT("Body rate"), bBodyRate);
+    TestTrue(FString::Printf(TEXT("Rates (%s)"), *Rates.BodyRateRadiansPerSecond.ToString()), Rates.BodyRateRadiansPerSecond.Equals(FVector(-0.5, 0.0, -1.0), 1e-12));
+    TestEqual(TEXT("Body-rate thrust"), Rates.NormalizedThrust, 0.5, 1e-9);
+    Target.type_mask = FUBotRosAttitudeTarget::IGNORE_ATTITUDE | FUBotRosAttitudeTarget::IGNORE_ROLL_RATE | FUBotRosAttitudeTarget::IGNORE_YAW_RATE;
+    UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 0.0, bBodyRate, Attitude, Rates);
+    TestTrue(TEXT("Only pitch rate"), Rates.BodyRateRadiansPerSecond.Equals(FVector(0.0, 0.25, 0.0), 1e-12));
+
+    // Invalid values are rejected.
+    FString Error;
+    FUBotRosAttitudeTarget Zero;
+    Zero.orientation = FUBotRosQuaternion::FromQuat(FQuat(0.0, 0.0, 0.0, 0.0));
+    TestFalse(TEXT("Zero quaternion rejected"), UBot::ROSConvert::MakeAttitudeTargetCommand(Zero, 0.0, bBodyRate, Attitude, Rates, &Error));
+    TestFalse(TEXT("With a reason"), Error.IsEmpty());
+    FUBotRosAttitudeTarget NotFinite;
+    NotFinite.thrust = std::numeric_limits<float>::quiet_NaN();
+    TestFalse(TEXT("NaN thrust rejected"), UBot::ROSConvert::MakeAttitudeTargetCommand(NotFinite, 0.0, bBodyRate, Attitude, Rates));
+    NotFinite.thrust = 0.5f;
+    NotFinite.type_mask = FUBotRosAttitudeTarget::IGNORE_ATTITUDE;
+    NotFinite.body_rate.y = std::numeric_limits<double>::infinity();
+    TestFalse(TEXT("Infinite rate rejected"), UBot::ROSConvert::MakeAttitudeTargetCommand(NotFinite, 0.0, bBodyRate, Attitude, Rates));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSConvertActuatorsTest, "UBotROS.Convert.Actuators", UBotROSConverterTests::TestFlags)
+
+bool FUBotROSConvertActuatorsTest::RunTest(const FString& Parameters)
+{
+    FUBotMotorCommand Command;
+    FUBotRosActuators Actuators;
+    Actuators.velocity = { 800.0, -5.0, 810.5, 0.0 };
+    Actuators.normalized = { 0.5, 0.5, 0.5, 0.5 };
+    TestTrue(TEXT("Velocities convert"), UBot::ROSConvert::MakeMotorCommand(Actuators, 1.25, Command));
+    TestEqual(TEXT("Velocity wins over normalized"), Command.Type, EUBotMotorCommandType::AngularVelocity);
+    TestTrue(TEXT("Negative speed counts as 0"), Command.Values == TArray<double>({ 800.0, 0.0, 810.5, 0.0 }));
+    TestEqual(TEXT("Timestamp"), Command.TimestampSeconds, 1.25, 0.0);
+
+    Actuators.velocity.Reset();
+    Actuators.normalized = { 0.25, 1.5, -0.5 };
+    TestTrue(TEXT("Normalized converts"), UBot::ROSConvert::MakeMotorCommand(Actuators, 0.0, Command));
+    TestEqual(TEXT("Normalized type"), Command.Type, EUBotMotorCommandType::Normalized);
+    TestTrue(TEXT("Clamped to 0..1"), Command.Values == TArray<double>({ 0.25, 1.0, 0.0 }));
+
+    FString Error;
+    Actuators.normalized.Reset();
+    Actuators.position = { 1.0 };
+    TestFalse(TEXT("Position only is rejected"), UBot::ROSConvert::MakeMotorCommand(Actuators, 0.0, Command, &Error));
+    TestFalse(TEXT("With a reason"), Error.IsEmpty());
+    Actuators.normalized = { 0.5, std::numeric_limits<double>::quiet_NaN() };
+    TestFalse(TEXT("NaN rejected"), UBot::ROSConvert::MakeMotorCommand(Actuators, 0.0, Command));
     return true;
 }
 

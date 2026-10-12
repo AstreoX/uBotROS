@@ -217,6 +217,8 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268
 | `/tf_static` | `tf2_msgs/msg/TFMessage` | reliable / transient_local / 1 | 所有 Sensor Bridge 的静态 TF 合并成一条锁存消息 |
 | `/clock`（`ClockTopic`） | `rosgraph_msgs/msg/Clock` | reliable / volatile / 10 | 子系统 |
 | `/<namespace>/cmd_vel` | `geometry_msgs/msg/Twist` | best_effort / volatile / 10 | ROS 发给 UE（订阅） |
+| `/<namespace>/cmd_attitude` | `mavros_msgs/msg/AttitudeTarget` | best_effort / volatile / 10 | ROS 发给 UE（订阅），见“飞行指令” |
+| `/<namespace>/cmd_motors` | `actuator_msgs/msg/Actuators` | best_effort / volatile / 10 | ROS 发给 UE（订阅），见“飞行指令” |
 
 消息要点：
 
@@ -304,6 +306,37 @@ public:
     virtual bool ApplyVelocityCommand_Implementation(const FUBotVelocityCommand& Command) override;
     virtual void StopMotion_Implementation() override;
 };
+```
+
+## 飞行指令
+
+研究飞控时，可以从 ROS 2 直接发姿态、角速度或单个电机的指令。两个组件的话题规则、`TargetComponent`、`CommandTimeoutSeconds`（默认 `0.5`）、错误事件和蓝图接口都与 uBot ROS Velocity Command 相同，同样不含控制逻辑。桥需要额外的消息包：`sudo apt install ros-humble-mavros-msgs ros-humble-actuator-msgs`。
+
+| 组件 | 默认话题 | 消息 | 目标接口（uBotCore） |
+| --- | --- | --- | --- |
+| **uBot ROS Attitude Command** | `/<namespace>/cmd_attitude` | `mavros_msgs/msg/AttitudeTarget` | `IUBotAttitudeCommandable` |
+| **uBot ROS Motor Command** | `/<namespace>/cmd_motors` | `actuator_msgs/msg/Actuators` | `IUBotMotorCommandable` |
+
+**AttitudeTarget 的换算**（`UBot::ROSConvert::MakeAttitudeTargetCommand`）：
+
+| `type_mask` | 结果 |
+| --- | --- |
+| 不含 `IGNORE_ATTITUDE`（128） | 姿态指令：`orientation`（ROS 世界系）经 `RotationROSToUE`；`body_rate` 不使用 |
+| 含 `IGNORE_ATTITUDE` | 角速度指令：`body_rate`（FLU）经 `AngularVelocityROSToUE`；带 `IGNORE_ROLL_RATE`（1）、`IGNORE_PITCH_RATE`（2）、`IGNORE_YAW_RATE`（4）的轴为 0 |
+| 不含 `IGNORE_THRUST`（64） | `thrust`（飞行器最大总推力的比例）截到 0..1 后使用 |
+| 含 `IGNORE_THRUST` | 不给推力，飞行器自己保持高度 |
+
+**Actuators 的换算**（`UBot::ROSConvert::MakeMotorCommand`）：`velocity[]` 有值时按电机转速（rad/s，负值按 0），否则用 `normalized[]`（截到 0..1）；`position[]` 不使用。值的个数与目标的 `GetMotorCount()` 不同时不下发，触发 `OnCommandError`。
+
+**超时**：超过 `CommandTimeoutSeconds` 没有新指令时，目标收到一次 `ReleaseAttitudeCommand` / `ReleaseMotorCommand`，由飞行器自己兜底（uBotAerial 的物理无人机默认刹车悬停）。`EndPlay` 时指令仍有效也会释放。
+
+```bash
+# 姿态：机头转向 +90°（向左），推力 60%
+ros2 topic pub -r 50 /drone/cmd_attitude mavros_msgs/msg/AttitudeTarget "{orientation: {z: 0.7071068, w: 0.7071068}, thrust: 0.6}"
+# 角速度：绕 z 轴 1 rad/s（向左偏航），不给推力（保持高度）
+ros2 topic pub -r 50 /drone/cmd_attitude mavros_msgs/msg/AttitudeTarget "{type_mask: 192, body_rate: {z: 1.0}}"
+# 四个电机的转速（rad/s）
+ros2 topic pub -r 100 /drone/cmd_motors actuator_msgs/msg/Actuators "{velocity: [800.0, 800.0, 800.0, 800.0]}"
 ```
 
 ## 扩展：为自定义传感器添加发布器

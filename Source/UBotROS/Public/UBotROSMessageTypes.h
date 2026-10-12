@@ -468,6 +468,47 @@ struct UBOTROS_API FUBotRosClock
     bool Deserialize(FUBotCdrReader& Reader);
 };
 
+/** mavros_msgs/msg/AttitudeTarget (orientation in the ROS world frame, body_rate in FLU). */
+struct UBOTROS_API FUBotRosAttitudeTarget
+{
+    static constexpr uint8 IGNORE_ROLL_RATE = 1;
+    static constexpr uint8 IGNORE_PITCH_RATE = 2;
+    static constexpr uint8 IGNORE_YAW_RATE = 4;
+    static constexpr uint8 IGNORE_THRUST = 64;
+    static constexpr uint8 IGNORE_ATTITUDE = 128;
+
+    FUBotRosHeader header;
+    uint8 type_mask = 0;
+    FUBotRosQuaternion orientation;
+    FUBotRosVector3 body_rate;
+    float thrust = 0.0f;
+
+    static const TCHAR* TypeName()
+    {
+        return TEXT("mavros_msgs/msg/AttitudeTarget");
+    }
+
+    void Serialize(FUBotCdrWriter& Writer) const;
+    bool Deserialize(FUBotCdrReader& Reader);
+};
+
+/** actuator_msgs/msg/Actuators */
+struct UBOTROS_API FUBotRosActuators
+{
+    FUBotRosHeader header;
+    TArray<double> position;
+    TArray<double> velocity;
+    TArray<double> normalized;
+
+    static const TCHAR* TypeName()
+    {
+        return TEXT("actuator_msgs/msg/Actuators");
+    }
+
+    void Serialize(FUBotCdrWriter& Writer) const;
+    bool Deserialize(FUBotCdrReader& Reader);
+};
+
 namespace UBot::Ros
 {
     /** Serializes a complete message: encapsulation header + CDR body, ready for a PUBLISH frame. */

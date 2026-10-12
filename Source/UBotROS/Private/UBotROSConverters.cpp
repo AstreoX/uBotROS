@@ -319,4 +319,104 @@ namespace UBot::ROSConvert
         Command.Source = RosSource;
         return Command;
     }
+
+    bool MakeAttitudeTargetCommand(const FUBotRosAttitudeTarget& Target, double TimestampSeconds, bool& bOutBodyRate,
+        FUBotAttitudeCommand& OutAttitude, FUBotBodyRateCommand& OutBodyRate, FString* OutError)
+    {
+        static const FName RosSource(TEXT("ROS"));
+        const auto Fail = [OutError](const TCHAR* Why)
+        {
+            if (OutError)
+            {
+                *OutError = Why;
+            }
+            return false;
+        };
+
+        const bool bUseThrust = (Target.type_mask & FUBotRosAttitudeTarget::IGNORE_THRUST) == 0;
+        if (bUseThrust && !FMath::IsFinite(Target.thrust))
+        {
+            return Fail(TEXT("thrust is not finite"));
+        }
+        const double Thrust = bUseThrust ? FMath::Clamp(static_cast<double>(Target.thrust), 0.0, 1.0) : 0.0;
+
+        bOutBodyRate = (Target.type_mask & FUBotRosAttitudeTarget::IGNORE_ATTITUDE) != 0;
+        if (bOutBodyRate)
+        {
+            FVector Rates = Target.body_rate.ToVector();
+            if (Rates.ContainsNaN())
+            {
+                return Fail(TEXT("body_rate is not finite"));
+            }
+            if (Target.type_mask & FUBotRosAttitudeTarget::IGNORE_ROLL_RATE)
+            {
+                Rates.X = 0.0;
+            }
+            if (Target.type_mask & FUBotRosAttitudeTarget::IGNORE_PITCH_RATE)
+            {
+                Rates.Y = 0.0;
+            }
+            if (Target.type_mask & FUBotRosAttitudeTarget::IGNORE_YAW_RATE)
+            {
+                Rates.Z = 0.0;
+            }
+            OutBodyRate = FUBotBodyRateCommand();
+            OutBodyRate.BodyRateRadiansPerSecond = UBot::Ros::AngularVelocityROSToUE(Rates);
+            OutBodyRate.bUseThrust = bUseThrust;
+            OutBodyRate.NormalizedThrust = Thrust;
+            OutBodyRate.TimestampSeconds = TimestampSeconds;
+            OutBodyRate.Source = RosSource;
+            return true;
+        }
+
+        const FQuat Orientation = Target.orientation.ToQuat();
+        if (!FMath::IsFinite(Orientation.X) || !FMath::IsFinite(Orientation.Y) || !FMath::IsFinite(Orientation.Z) || !FMath::IsFinite(Orientation.W))
+        {
+            return Fail(TEXT("orientation is not finite"));
+        }
+        if (Orientation.SizeSquared() < 0.01)
+        {
+            return Fail(TEXT("orientation is not a rotation (zero quaternion)"));
+        }
+        OutAttitude = FUBotAttitudeCommand();
+        OutAttitude.Orientation = UBot::Ros::RotationROSToUE(Orientation.GetNormalized());
+        OutAttitude.bUseThrust = bUseThrust;
+        OutAttitude.NormalizedThrust = Thrust;
+        OutAttitude.TimestampSeconds = TimestampSeconds;
+        OutAttitude.Source = RosSource;
+        return true;
+    }
+
+    bool MakeMotorCommand(const FUBotRosActuators& Actuators, double TimestampSeconds, FUBotMotorCommand& OutCommand, FString* OutError)
+    {
+        static const FName RosSource(TEXT("ROS"));
+        const bool bSpeeds = !Actuators.velocity.IsEmpty();
+        const TArray<double>& Values = bSpeeds ? Actuators.velocity : Actuators.normalized;
+        if (Values.IsEmpty())
+        {
+            if (OutError)
+            {
+                *OutError = TEXT("neither velocity nor normalized has values");
+            }
+            return false;
+        }
+        OutCommand = FUBotMotorCommand();
+        OutCommand.Type = bSpeeds ? EUBotMotorCommandType::AngularVelocity : EUBotMotorCommandType::Normalized;
+        OutCommand.Values.Reserve(Values.Num());
+        for (const double Value : Values)
+        {
+            if (!FMath::IsFinite(Value))
+            {
+                if (OutError)
+                {
+                    *OutError = bSpeeds ? TEXT("velocity has a value that is not finite") : TEXT("normalized has a value that is not finite");
+                }
+                return false;
+            }
+            OutCommand.Values.Add(bSpeeds ? FMath::Max(Value, 0.0) : FMath::Clamp(Value, 0.0, 1.0));
+        }
+        OutCommand.TimestampSeconds = TimestampSeconds;
+        OutCommand.Source = RosSource;
+        return true;
+    }
 }

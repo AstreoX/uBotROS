@@ -418,6 +418,27 @@ namespace UBotROSCdrTests
         return Result;
     }
 
+    FUBotRosAttitudeTarget MakeAttitudeTarget()
+    {
+        FUBotRosAttitudeTarget Result;
+        Result.header = MakeHeader(3, 250000000, TEXT("map"));
+        Result.type_mask = FUBotRosAttitudeTarget::IGNORE_ROLL_RATE | FUBotRosAttitudeTarget::IGNORE_PITCH_RATE;
+        Result.orientation = MakeQuaternion(0.1, -0.2, 0.3, 0.9);
+        Result.body_rate = MakeVector3(0.5, -0.25, 1.5);
+        Result.thrust = 0.625f;
+        return Result;
+    }
+
+    FUBotRosActuators MakeActuators()
+    {
+        FUBotRosActuators Result;
+        Result.header = MakeHeader(7, 5, TEXT("base_link"));
+        Result.position = { 0.5 };
+        Result.velocity = { 800.0, 810.5, 0.0, 795.25 };
+        Result.normalized = { 0.25, 0.5, 0.75, 1.0 };
+        return Result;
+    }
+
     bool ExpectSameTwist(FAutomationTestBase& Test, const FString& What, const FUBotRosTwist& Actual, const FUBotRosTwist& Expected)
     {
         // Every component is checked (and reported) even after a mismatch.
@@ -967,6 +988,8 @@ UBOTROS_GOLDEN_TEST(CameraInfo, "sensor_msgs/msg/CameraInfo", MakeCameraInfo())
 UBOTROS_GOLDEN_TEST(TfMessage, "tf2_msgs/msg/TFMessage", MakeTfMessage())
 UBOTROS_GOLDEN_TEST(Clock, "rosgraph_msgs/msg/Clock", MakeClock())
 UBOTROS_GOLDEN_TEST(Twist, "geometry_msgs/msg/Twist", MakeTwist())
+UBOTROS_GOLDEN_TEST(AttitudeTarget, "mavros_msgs/msg/AttitudeTarget", MakeAttitudeTarget())
+UBOTROS_GOLDEN_TEST(Actuators, "actuator_msgs/msg/Actuators", MakeActuators())
 
 #undef UBOTROS_GOLDEN_TEST
 
