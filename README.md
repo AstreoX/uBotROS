@@ -44,7 +44,7 @@ UBotROS 插件 ──TCP 8268──▶ ubot_ros_bridge (rclpy) ──▶ ROS 2 �
 
 ## 在 uBot 家族中的位置
 
-UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.0` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
+UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.2` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
 
 | Package | 层 | 作用 |
 | --- | --- | --- |
@@ -580,6 +580,6 @@ UE 测试发布 IMU、点云、静态 TF 和 `/clock`，并订阅 `/ubot_e2e/cmd
 
 ## 版本与许可
 
-当前版本 **0.1.1**（Beta，`IsBetaVersion`），仓库 <https://github.com/AstreoX/uBotROS>。
+当前版本 **0.1.2**（Beta，`IsBetaVersion`），仓库 <https://github.com/AstreoX/uBotROS>。
 
 Copyright 2026 AstreoX。本项目以 [Apache License 2.0](LICENSE) 发布，可以自由使用、修改和再分发（包括商业用途），再分发时需保留 `LICENSE` 与 `NOTICE` 文件，并注明你修改过的文件。

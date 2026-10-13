@@ -1,7 +1,7 @@
 {
   "format": 1,
   "plugin": "UBotROS",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "engine": "5.5",
   "repository": "https://github.com/AstreoX/uBotROS",
   "generator": "UBotDocExport 1",

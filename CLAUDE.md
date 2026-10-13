@@ -6,7 +6,7 @@ Instructions for coding agents and contributors working on UBotROS (AstreoX/uBot
 
 UBotROS is the ROS 2 adapter plugin of the uBot family for Unreal Engine 5.5. It publishes uBot sensors, `/tf`, `/tf_static` and `/clock` to ROS 2 and feeds `cmd_vel` to velocity-commandable actors, through a TCP bridge (`ros2/ubot_ros_bridge`, an rclpy node). It is a translation layer with no control logic.
 
-- Depends on `UBotCore ^0.1.0` and `UBotSensor ^0.1.0` (`UBotROS.uplugin`: `Plugins` and `UBot.Requires`). `UBot.Provides`: `ROS.SensorPublishing`, `ROS.TF`, `ROS.Clock`, `ROS.VelocityCommand`.
+- Depends on `UBotCore ^0.1.2` and `UBotSensor ^0.1.0` (`UBotROS.uplugin`: `Plugins` and `UBot.Requires`). `UBot.Provides`: `ROS.SensorPublishing`, `ROS.TF`, `ROS.Clock`, `ROS.VelocityCommand`, `ROS.AttitudeCommand`, `ROS.MotorCommand`.
 - No third-party code in UE: `UBotROS.Build.cs` lists engine modules only (`Core`, `CoreUObject`, `Engine`, `DeveloperSettings`, `Sockets`, `Networking`, `Json`) plus the two uBot modules. Nothing links rclcpp. UE encodes ROS 2 CDR itself (`FUBotCdrWriter`, `FUBotRos*` structs); the bridge forwards the bytes without decoding them.
 
 ## 2. Layout
