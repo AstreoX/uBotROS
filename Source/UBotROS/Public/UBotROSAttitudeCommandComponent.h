@@ -10,7 +10,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUBotROSBodyRateCommandReceivedEvent
 
 /**
  * Receives mavros_msgs/msg/AttitudeTarget on /<namespace>/cmd_attitude and forwards it to an
- * IUBotAttitudeCommandable target (an aerial vehicle such as a uBot Physics Drone).
+ * IUBotAttitudeCommandable target (an aerial vehicle, such as a drone with a uBot Multirotor Dynamics component).
  *
  * - type_mask without IGNORE_ATTITUDE (128): an attitude command; the orientation is converted from the ROS world
  *   frame to UE and body_rate is not used.

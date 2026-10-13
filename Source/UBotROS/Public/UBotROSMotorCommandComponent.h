@@ -9,9 +9,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FUBotROSMotorCommandReceivedEvent, c
 
 /**
  * Receives actuator_msgs/msg/Actuators on /<namespace>/cmd_motors and forwards it to an IUBotMotorCommandable
- * target (for example a uBot Bare Airframe Drone). velocity[] (rad/s) is used when it has values, else
- * normalized[] (0..1); position[] is ignored. A command whose length differs from the target's motor count is
- * not dispatched.
+ * target (for example a drone's uBot Multirotor Dynamics component). velocity[] (rad/s) is used when it has
+ * values, else normalized[] (0..1); position[] is ignored. A command whose length differs from the target's
+ * motor count is not dispatched.
  *
  * The bridge needs the actuator_msgs package (ros-humble-actuator-msgs).
  */

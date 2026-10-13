@@ -21,7 +21,7 @@
       "module": "UBotROS",
       "header": "Source/UBotROS/Public/UBotROSAttitudeCommandComponent.h",
       "category": "uBot",
-      "tooltip": "Receives mavros_msgs/msg/AttitudeTarget on /<namespace>/cmd_attitude and forwards it to an\nIUBotAttitudeCommandable target (an aerial vehicle such as a uBot Physics Drone).\n\n- type_mask without IGNORE_ATTITUDE (128): an attitude command; the orientation is converted from the ROS world\n  frame to UE and body_rate is not used.\n- type_mask with IGNORE_ATTITUDE: a body-rate command from body_rate (FLU -> UE body); axes with\n  IGNORE_ROLL_RATE (1), IGNORE_PITCH_RATE (2) or IGNORE_YAW_RATE (4) are 0.\n- thrust (0..1 of the vehicle's maximum) is used unless IGNORE_THRUST (64) is set; then the vehicle holds its\n  altitude.\n\nThe bridge needs the mavros_msgs package (ros-humble-mavros-msgs).",
+      "tooltip": "Receives mavros_msgs/msg/AttitudeTarget on /<namespace>/cmd_attitude and forwards it to an\nIUBotAttitudeCommandable target (an aerial vehicle, such as a drone with a uBot Multirotor Dynamics component).\n\n- type_mask without IGNORE_ATTITUDE (128): an attitude command; the orientation is converted from the ROS world\n  frame to UE and body_rate is not used.\n- type_mask with IGNORE_ATTITUDE: a body-rate command from body_rate (FLU -> UE body); axes with\n  IGNORE_ROLL_RATE (1), IGNORE_PITCH_RATE (2) or IGNORE_YAW_RATE (4) are 0.\n- thrust (0..1 of the vehicle's maximum) is used unless IGNORE_THRUST (64) is set; then the vehicle holds its\n  altitude.\n\nThe bridge needs the mavros_msgs package (ros-humble-mavros-msgs).",
       "flags": {
         "abstract": false,
         "blueprintType": true,
@@ -203,7 +203,7 @@
       "module": "UBotROS",
       "header": "Source/UBotROS/Public/UBotROSMotorCommandComponent.h",
       "category": "uBot",
-      "tooltip": "Receives actuator_msgs/msg/Actuators on /<namespace>/cmd_motors and forwards it to an IUBotMotorCommandable\ntarget (for example a uBot Bare Airframe Drone). velocity[] (rad/s) is used when it has values, else\nnormalized[] (0..1); position[] is ignored. A command whose length differs from the target's motor count is\nnot dispatched.\n\nThe bridge needs the actuator_msgs package (ros-humble-actuator-msgs).",
+      "tooltip": "Receives actuator_msgs/msg/Actuators on /<namespace>/cmd_motors and forwards it to an IUBotMotorCommandable\ntarget (for example a drone's uBot Multirotor Dynamics component). velocity[] (rad/s) is used when it has\nvalues, else normalized[] (0..1); position[] is ignored. A command whose length differs from the target's\nmotor count is not dispatched.\n\nThe bridge needs the actuator_msgs package (ros-humble-actuator-msgs).",
       "flags": {
         "abstract": false,
         "blueprintType": true,
