@@ -23,7 +23,7 @@
 
 ## What it is
 
-uBot ROS is the beta ROS 2 adapter of the [uBot family](#ubot-family) for Unreal Engine 5.5. It publishes uBot sensors, TF and the simulation clock to ROS 2 and delivers the velocity, attitude and motor commands that arrive from ROS 2 to Actors.
+uBot ROS is the beta ROS 2 adapter of the [uBot series](#ubot-series) for Unreal Engine 5.5. It publishes uBot sensors, TF and the simulation clock to ROS 2 and delivers the velocity, attitude and motor commands that arrive from ROS 2 to Actors.
 
 - **No third-party dependencies in Unreal.** The plugin encodes ROS 2 CDR itself; rclcpp and TempoROS are not required.
 - **Separate systems.** One TCP connection (port 8268) joins Unreal and ROS 2, for example UE on Windows and ROS 2 in WSL.
@@ -93,7 +93,7 @@ The documentation site and `docs/` are in Chinese; [docs/PROTOCOL.md](docs/PROTO
 | migrate from the old ROS plugins | [Migration](https://astreox.github.io/uBotDocs/develop/migration/), [docs/MIGRATION.md](docs/MIGRATION.md) |
 | read the protocol and design notes | [docs/PROTOCOL.md](docs/PROTOCOL.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 
-## uBot family
+## uBot series
 
 | Repository | What it is |
 | --- | --- |

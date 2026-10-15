@@ -23,7 +23,7 @@
 
 ## 简介
 
-uBot ROS 是 [uBot 家族](#ubot-家族)中面向 Unreal Engine 5.5 的 ROS 2 适配器（Beta）。它把 uBot 传感器、TF 和仿真时钟发布到 ROS 2，并把 ROS 2 发来的速度、姿态和电机指令交给 Actor。
+uBot ROS 是 [uBot 系列](#ubot-系列)中面向 Unreal Engine 5.5 的 ROS 2 适配器（Beta）。它把 uBot 传感器、TF 和仿真时钟发布到 ROS 2，并把 ROS 2 发来的速度、姿态和电机指令交给 Actor。
 
 - **UE 侧没有第三方依赖。** 插件自行编码 ROS 2 CDR，不需要 rclcpp 和 TempoROS。
 - **可分处不同系统。** UE 与 ROS 2 之间只有一条 TCP 连接（端口 8268），例如 UE 运行在 Windows，ROS 2 运行在 WSL。
@@ -93,7 +93,7 @@ git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBo
 | 从旧的 ROS 插件迁移 | [从旧插件迁移](https://astreox.github.io/uBotDocs/develop/migration/)、[docs/MIGRATION.md](docs/MIGRATION.md) |
 | 了解协议和设计 | [docs/PROTOCOL.md](docs/PROTOCOL.md)、[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 
-## uBot 家族
+## uBot 系列
 
 | 仓库 | 说明 |
 | --- | --- |
