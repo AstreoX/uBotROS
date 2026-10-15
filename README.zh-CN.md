@@ -23,20 +23,20 @@
 
 ## 简介
 
-uBot ROS 是 [uBot 家族](#ubot-家族)中面向 Unreal Engine 5.5 的 ROS 2 适配器（Beta）。它把 uBot 传感器、TF 和仿真时钟发布到 ROS 2，并把 ROS 2 发来的速度、姿态和电机指令交给 Actor。它只做翻译，不含控制逻辑。
+uBot ROS 是 [uBot 家族](#ubot-家族)中面向 Unreal Engine 5.5 的 ROS 2 适配器（Beta）。它把 uBot 传感器、TF 和仿真时钟发布到 ROS 2，并把 ROS 2 发来的速度、姿态和电机指令交给 Actor。
 
-- **UE 侧没有第三方依赖。** 插件自己把消息编码成标准的 ROS 2 CDR，不需要 rclcpp、TempoROS 或其他第三方库。
-- **UE 和 ROS 2 可以在不同的系统上。** 两边只靠一条 TCP 连接（端口 8268）相连，例如 UE 运行在 Windows，ROS 2 运行在 WSL。
+- **UE 侧没有第三方依赖。** 插件自行编码 ROS 2 CDR，不需要 rclcpp 和 TempoROS。
+- **可分处不同系统。** UE 与 ROS 2 之间只有一条 TCP 连接（端口 8268），例如 UE 运行在 Windows，ROS 2 运行在 WSL。
 - **七种传感器。** 位姿、里程计、IMU、2D / 3D 激光雷达、RGB 与深度相机，时间戳取仿真时间。
-- **指令回到仿真。** `cmd_vel` 交给实现了 uBot 速度接口的 Actor 或组件，姿态和电机指令交给无人机。
-- **自动重连。** 连接断开后插件会重试，并重新注册全部话题。
+- **来自 ROS 2 的指令。** `cmd_vel` 交给实现了 uBot 速度接口的 Actor 或组件，姿态和电机指令交给无人机。
+- **自动重连。** 连接断开后，插件重试并重新注册全部话题。
 
 ```mermaid
 flowchart LR
     S["uBot 传感器"] -->|采样| P["UBotROS 插件<br/>（Unreal Engine）"]
     P -->|指令| A["执行器"]
     P <-->|"TCP 8268"| B["ubot_ros_bridge<br/>（rclpy 节点）"]
-    B <-->|话题| R["你的 ROS 2 节点"]
+    B <-->|话题| R["ROS 2 节点"]
 ```
 
 `<ns>` 是机器人的命名空间：优先取 `uBot Identity` 组件的 `Namespace`，否则取 Actor 名。
@@ -51,19 +51,17 @@ flowchart LR
 | `/<ns>/cmd_vel` | `geometry_msgs/msg/Twist` | ROS 2 → UE |
 | `/<ns>/cmd_attitude`、`/<ns>/cmd_motors` | `mavros_msgs/msg/AttitudeTarget`、`actuator_msgs/msg/Actuators` | ROS 2 → UE |
 
-没有订阅者的传感器话题默认不编码、不发送，所以 `ros2 topic list` 里有话题，不代表一直有数据。
-
 ## 安装
 
-**推荐：uBot Manager。** 从 [uBotManager 的 Releases](https://github.com/AstreoX/uBotManager/releases) 下载安装包，打开工程的 `.uproject`，应用「ROS 2 传感器」组合（Recipe）。它会一次装好并启用 UBotCore、UBotSensor 和 uBot ROS，步骤见[安装 uBot](https://astreox.github.io/uBotDocs/start/install/)。
+**推荐：uBot Manager。** 从 [uBotManager 的 Releases](https://github.com/AstreoX/uBotManager/releases) 下载安装包，打开工程的 `.uproject`，应用「ROS 2 传感器」组合（Recipe）。该组合会安装并启用 UBotCore、UBotSensor 和 uBot ROS，步骤见[安装 uBot](https://astreox.github.io/uBotDocs/start/install/)。
 
-**手动安装：** 先装 UBotCore 和 UBotSensor，再把本仓库克隆到它们旁边，并在 `Edit > Plugins` 中启用 **uBot ROS**。插件从源码编译，工程需要能编译 C++。
+**手动安装：** 先安装 UBotCore 和 UBotSensor，再把本仓库克隆到它们旁边，并在 `Edit > Plugins` 中启用 **uBot ROS**。插件从源码编译，需要 C++ 工程。
 
 ```bash
 git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBot/uBotROS
 ```
 
-**要求：** Unreal Engine 5.5（在 Windows 上开发和测试）、UBotCore `^0.1.2`、UBotSensor `^0.1.0`；桥端需要 ROS 2 Humble 和 `rclpy`（在 Ubuntu 22.04 上测试）。
+**要求：** Unreal Engine 5.5（Windows）、UBotCore `^0.1.2`、UBotSensor `^0.1.0`；桥端需要 ROS 2 Humble（Ubuntu 22.04）和 `rclpy`。
 
 ## 快速开始
 
@@ -78,15 +76,15 @@ git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBo
 2. 在 Unreal Editor 里点击 **Play**。插件会连接 `127.0.0.1:8268` 并发布 `/clock`。
 3. 在另一个 ROS 2 终端里运行 `ros2 topic echo /clock --once`。
 
-要发布传感器，请给 Actor 添加 uBot 传感器组件和 **uBot ROS Sensor Bridge**。协议没有认证和加密，桥默认监听所有网卡；在不可信的网络里请加 `--bind-address 127.0.0.1`。
+要发布传感器，请给 Actor 添加 uBot 传感器组件和 **uBot ROS Sensor Bridge**。桥默认监听所有网卡，没有认证和加密；在不可信的网络里，请用 `--bind-address 127.0.0.1` 启动。
 
 ## 文档
 
-文档站和 `docs/` 里的文件是中文，协议规范 [docs/PROTOCOL.md](docs/PROTOCOL.md) 是英文。
+文档站和 `docs/` 是中文，[docs/PROTOCOL.md](docs/PROTOCOL.md) 是英文。
 
 | 我想… | 前往 |
 | --- | --- |
-| 准备 ROS 2 一侧并确认连通 | [准备 ROS 2 端](https://astreox.github.io/uBotDocs/ros/ros2-setup/) |
+| 准备 ROS 2 端并确认连通 | [准备 ROS 2 端](https://astreox.github.io/uBotDocs/ros/ros2-setup/) |
 | 发布传感器、TF 和 `/clock` | [发布传感器数据](https://astreox.github.io/uBotDocs/ros/publish-sensors/)、[TF 与 /clock](https://astreox.github.io/uBotDocs/ros/tf-and-clock/) |
 | 用 `cmd_vel` 驱动 Actor | [接收 cmd_vel](https://astreox.github.io/uBotDocs/ros/cmd-vel/) |
 | 从 ROS 2 控制无人机 | [从 ROS 2 发飞行指令](https://astreox.github.io/uBotDocs/ros/flight-commands/) |
@@ -110,8 +108,8 @@ git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBo
 
 - 构建：把插件放进装有 UBotCore 和 UBotSensor 的 UE 5.5 工程的 `<Project>/Plugins/uBot/uBotROS`，然后编译工程。
 - 测试：UE 自动化测试（`UBotROS.*`）和桥的 Python 测试，见 [docs/TESTING.md](docs/TESTING.md)。
-- 修改协议时，规范、UE 端和桥要一起改，见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
-- 报告问题或提问请到 [Issues](https://github.com/AstreoX/uBotROS/issues)。
+- 修改协议时，规范、UE 端和桥一并修改，见 [docs/PROTOCOL.md](docs/PROTOCOL.md)。
+- 问题请提交到 [Issues](https://github.com/AstreoX/uBotROS/issues)。
 
 ## 许可证
 

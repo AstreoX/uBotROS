@@ -23,20 +23,20 @@
 
 ## What it is
 
-uBot ROS is the beta ROS 2 adapter of the [uBot family](#ubot-family) for Unreal Engine 5.5. It publishes uBot sensors, TF and the simulation clock to ROS 2, and passes the velocity, attitude and motor commands that arrive from ROS 2 to your actors. It is a translation layer without control logic.
+uBot ROS is the beta ROS 2 adapter of the [uBot family](#ubot-family) for Unreal Engine 5.5. It publishes uBot sensors, TF and the simulation clock to ROS 2 and delivers the velocity, attitude and motor commands that arrive from ROS 2 to Actors.
 
-- **No third-party dependencies in Unreal.** The plugin encodes standard ROS 2 CDR itself, so it needs no rclcpp, TempoROS or other third-party library.
-- **Unreal and ROS 2 can run on different systems.** One TCP connection (port 8268) joins them, for example UE on Windows and ROS 2 in WSL.
+- **No third-party dependencies in Unreal.** The plugin encodes ROS 2 CDR itself; rclcpp and TempoROS are not required.
+- **Separate systems.** One TCP connection (port 8268) joins Unreal and ROS 2, for example UE on Windows and ROS 2 in WSL.
 - **Seven sensor types.** Pose, odometry, IMU, 2D and 3D lidar, RGB and depth cameras, stamped with simulation time.
-- **Commands back into the simulation.** `cmd_vel` reaches any Actor or component that implements the uBot velocity interface; attitude and motor commands reach drones.
-- **Reconnects on its own.** After a lost connection the plugin retries and registers its topics again.
+- **Commands from ROS 2.** `cmd_vel` goes to any Actor or component that implements the uBot velocity interface; attitude and motor commands go to drones.
+- **Automatic reconnect.** After a lost connection the plugin retries and registers its topics again.
 
 ```mermaid
 flowchart LR
     S["uBot sensors"] -->|samples| P["UBotROS plugin<br/>(Unreal Engine)"]
     P -->|commands| A["Actuators"]
     P <-->|"TCP 8268"| B["ubot_ros_bridge<br/>(rclpy node)"]
-    B <-->|topics| R["Your ROS 2 nodes"]
+    B <-->|topics| R["ROS 2 nodes"]
 ```
 
 `<ns>` is the robot namespace: the `Namespace` of its `uBot Identity` component, otherwise the Actor name.
@@ -51,19 +51,17 @@ flowchart LR
 | `/<ns>/cmd_vel` | `geometry_msgs/msg/Twist` | ROS 2 → UE |
 | `/<ns>/cmd_attitude`, `/<ns>/cmd_motors` | `mavros_msgs/msg/AttitudeTarget`, `actuator_msgs/msg/Actuators` | ROS 2 → UE |
 
-Sensor topics without subscribers are not encoded or sent by default, so a topic in `ros2 topic list` does not always carry data.
-
 ## Install
 
-**Recommended: uBot Manager.** Download the installer from the [uBotManager releases](https://github.com/AstreoX/uBotManager/releases), open your `.uproject` and apply the **ROS 2 Sensors** recipe. It installs and enables UBotCore, UBotSensor and uBot ROS in one step; see [Install uBot](https://astreox.github.io/uBotDocs/start/install/).
+**Recommended: uBot Manager.** Download the installer from the [uBotManager releases](https://github.com/AstreoX/uBotManager/releases), open the `.uproject` and apply the **ROS 2 Sensors** recipe. The recipe installs and enables UBotCore, UBotSensor and uBot ROS; see [Install uBot](https://astreox.github.io/uBotDocs/start/install/).
 
-**Manual:** install UBotCore and UBotSensor first, then clone this repository next to them and enable **uBot ROS** in `Edit > Plugins`. The plugin is built from source, so the project needs C++.
+**Manual:** install UBotCore and UBotSensor first, then clone this repository next to them and enable **uBot ROS** in `Edit > Plugins`. The plugin compiles from source and needs a C++ project.
 
 ```bash
 git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBot/uBotROS
 ```
 
-**Requirements:** Unreal Engine 5.5 (developed and tested on Windows), UBotCore `^0.1.2`, UBotSensor `^0.1.0`, and ROS 2 Humble with `rclpy` for the bridge (tested on Ubuntu 22.04).
+**Requirements:** Unreal Engine 5.5 (Windows), UBotCore `^0.1.2`, UBotSensor `^0.1.0`; ROS 2 Humble (Ubuntu 22.04) with `rclpy` for the bridge.
 
 ## Quick start
 
@@ -78,22 +76,22 @@ git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBo
 2. Press **Play** in Unreal Editor. The plugin connects to `127.0.0.1:8268` and publishes `/clock`.
 3. In a second ROS 2 terminal, run `ros2 topic echo /clock --once`.
 
-To publish sensors, add uBot sensor components and **uBot ROS Sensor Bridge** to an Actor. The protocol has no authentication or encryption and the bridge listens on all interfaces by default; on untrusted networks add `--bind-address 127.0.0.1`.
+To publish sensors, add uBot sensor components and **uBot ROS Sensor Bridge** to an Actor. The bridge listens on all interfaces without authentication or encryption; on untrusted networks start it with `--bind-address 127.0.0.1`.
 
 ## Documentation
 
-The documentation site and the files in `docs/` are written in Chinese, except the English [wire protocol](docs/PROTOCOL.md).
+The documentation site and `docs/` are in Chinese; [docs/PROTOCOL.md](docs/PROTOCOL.md) is in English.
 
 | I want to ... | Go to |
 | --- | --- |
 | set up the ROS 2 side and check the connection | [Prepare the ROS 2 side](https://astreox.github.io/uBotDocs/ros/ros2-setup/) |
 | publish sensors, TF and `/clock` | [Publish sensors](https://astreox.github.io/uBotDocs/ros/publish-sensors/), [TF and /clock](https://astreox.github.io/uBotDocs/ros/tf-and-clock/) |
 | drive an Actor with `cmd_vel` | [Receive cmd_vel](https://astreox.github.io/uBotDocs/ros/cmd-vel/) |
-| fly a drone from ROS 2 | [Flight commands](https://astreox.github.io/uBotDocs/ros/flight-commands/) |
-| fix a connection problem | [Connection and status](https://astreox.github.io/uBotDocs/ros/connection/) |
+| control a drone from ROS 2 | [Flight commands](https://astreox.github.io/uBotDocs/ros/flight-commands/) |
+| troubleshoot the connection | [Connection and status](https://astreox.github.io/uBotDocs/ros/connection/) |
 | publish a custom sensor | [Add a ROS publisher](https://astreox.github.io/uBotDocs/develop/ros-publisher/) |
-| move from the old ROS plugins | [Migration](https://astreox.github.io/uBotDocs/develop/migration/), [docs/MIGRATION.md](docs/MIGRATION.md) |
-| read the wire protocol or the design | [docs/PROTOCOL.md](docs/PROTOCOL.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| migrate from the old ROS plugins | [Migration](https://astreox.github.io/uBotDocs/develop/migration/), [docs/MIGRATION.md](docs/MIGRATION.md) |
+| read the protocol and design notes | [docs/PROTOCOL.md](docs/PROTOCOL.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
 
 ## uBot family
 
@@ -108,10 +106,10 @@ The documentation site and the files in `docs/` are written in Chinese, except t
 
 ## Development
 
-- Build: put the plugin in `<Project>/Plugins/uBot/uBotROS` of a UE 5.5 project that has UBotCore and UBotSensor, then build the project.
-- Test: UE automation tests (`UBotROS.*`) and Python tests for the bridge; see [docs/TESTING.md](docs/TESTING.md).
-- Protocol changes touch the spec, the UE side and the bridge together; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
-- Report a bug or ask a question in [Issues](https://github.com/AstreoX/uBotROS/issues).
+- Build: place the plugin in `<Project>/Plugins/uBot/uBotROS` of a UE 5.5 project that has UBotCore and UBotSensor, then build the project.
+- Test: UE automation tests (`UBotROS.*`) and the bridge's Python tests; see [docs/TESTING.md](docs/TESTING.md).
+- A protocol change updates the specification, the UE side and the bridge together; see [docs/PROTOCOL.md](docs/PROTOCOL.md).
+- Report issues in [Issues](https://github.com/AstreoX/uBotROS/issues).
 
 ## License
 
