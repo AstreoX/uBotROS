@@ -15,8 +15,9 @@ class UUBotPointCloudFrame;
  * uBot data -> ROS 2 message structs, and ROS cmd_vel -> uBot velocity command.
  *
  * Pure functions without I/O or global state. Frame ids are resolved by the caller (namespace prefix,
- * optical suffix, overrides); the converters never read frame ids out of the uBot data. Every coordinate,
- * unit and time conversion goes through UBot::Ros (UBotCore), see UBotRosConventions.h for the math.
+ * optical suffix, overrides); the converters never read frame ids out of the uBot data. Axis and unit
+ * conversions go through UBot::RightHanded and UBot::Units (UBotCore, see UBotRightHandedConventions.h for the
+ * math); the camera optical frame and the time split are ROS-specific, see UBotROSConventionHelpers.h.
  */
 namespace UBot::ROSConvert
 {
@@ -34,30 +35,30 @@ namespace UBot::ROSConvert
     inline constexpr const TCHAR* ImageEncodingDepth32FC1 = TEXT("32FC1");
 
     /**
-     * std_msgs/Header: stamp = FUBotRosTime::FromSeconds(Header.TimestampSeconds) (UBot::Ros::SecondsToRosTime),
+     * std_msgs/Header: stamp = FUBotRosTime::FromSeconds(Header.TimestampSeconds) (UBot::ROSConventions::SecondsToRosTime),
      * frame_id = FrameId (Header.FrameId is ignored).
      */
     FUBotRosHeader MakeHeader(const FUBotFrameHeader& Header, const FString& FrameId);
 
-    /** position = VectorUEToROS(PositionMeters), orientation = RotationUEToROS. Velocity is not part of PoseStamped. */
+    /** position = VectorFromUE(PositionMeters), orientation = RotationFromUE. Velocity is not part of PoseStamped. */
     FUBotRosPoseStamped MakePose(const FUBotPoseSensorData& Data, const FString& FrameId);
 
     /**
      * header.frame_id = OdomFrameId, child_frame_id = ChildFrameId. Pose as MakePose; twist.linear via
-     * VectorUEToROS, twist.angular via AngularVelocityUEToROS; both 6x6 covariances via ConvertCovariance6.
+     * VectorFromUE, twist.angular via AngularVelocityFromUE; both 6x6 covariances via ConvertCovariance6.
      */
     FUBotRosOdometry MakeOdometry(const FUBotOdometrySensorData& Data, const FString& OdomFrameId, const FString& ChildFrameId);
 
     /**
-     * orientation = RotationUEToROS, angular_velocity = AngularVelocityUEToROS (UE yaw-right rate -> negative
-     * ROS z), linear_acceleration = VectorUEToROS. The per-axis variances fill the covariance diagonals
+     * orientation = RotationFromUE, angular_velocity = AngularVelocityFromUE (UE yaw-right rate -> negative
+     * ROS z), linear_acceleration = VectorFromUE. The per-axis variances fill the covariance diagonals
      * (indices 0, 4, 8); a mirror only flips signs, so variances are unchanged. Off-diagonal entries are 0.
      */
     FUBotRosImu MakeImu(const FUBotImuSensorData& Data, const FString& FrameId);
 
     /**
-     * Mirrored scan: UE angles grow to the right, ROS angles to the left. angle_min = YawUEToROS(AngleMax),
-     * angle_max = YawUEToROS(AngleMin), angle_increment unchanged (positive), and ROS index i holds UE sample
+     * Mirrored scan: UE angles grow to the right, ROS angles to the left. angle_min = YawFromUE(AngleMax),
+     * angle_max = YawFromUE(AngleMin), angle_increment unchanged (positive), and ROS index i holds UE sample
      * N - 1 - i, so ROS angle_min + i * angle_increment = -(UE angle of that sample). Samples without a hit
      * report +inf (REP 117). Intensities are reversed the same way; they are empty when the frame carries
      * none. scan_time = ScanPeriodSeconds, time_increment = ScanPeriodSeconds / (N - 1) (legacy behaviour).
@@ -67,7 +68,7 @@ namespace UBot::ROSConvert
     /**
      * Unorganized cloud (height 1, width = point count) with fields x, y, z (float32 @ 0/4/8), intensity
      * (float32 @ 12), ring (uint16 @ 16), time (float32 @ 18), point_step 22, little endian. Points go through
-     * VectorUEToROS (sensor-local meters, y negated); intensity is 0 for frames without intensity data; ring
+     * VectorFromUE (sensor-local meters, y negated); intensity is 0 for frames without intensity data; ring
      * is clamped to [0, 65535]. is_dense is true when every coordinate is finite.
      */
     FUBotRosPointCloud2 MakePointCloud2(const UUBotPointCloudFrame& Frame, const FString& FrameId);
@@ -88,12 +89,12 @@ namespace UBot::ROSConvert
 
     /**
      * ParentFromChild is the child's transform expressed in the parent (UE, centimeters), i.e. it maps child
-     * coordinates to parent coordinates. Converted with UBot::Ros::TransformUEToROS (meters, mirrored
+     * coordinates to parent coordinates. Converted with UBot::RightHanded::TransformFromUE (meters, mirrored
      * rotation, scale dropped). header.frame_id = ParentFrame, child_frame_id = ChildFrame.
      */
     FUBotRosTransformStamped MakeTransform(const FTransform& ParentFromChildUE, double StampSeconds, const FString& ParentFrame, const FString& ChildFrame);
 
-    /** CameraFrame -> OpticalFrame: zero translation, rotation UBot::Ros::CameraLinkToOpticalRotation(). */
+    /** CameraFrame -> OpticalFrame: zero translation, rotation UBot::ROSConventions::CameraLinkToOpticalRotation(). */
     FUBotRosTransformStamped MakeOpticalTransform(double StampSeconds, const FString& CameraFrame, const FString& OpticalFrame);
 
     /**
@@ -104,15 +105,15 @@ namespace UBot::ROSConvert
     void ConvertCovariance6(const TArray<double>& UECovariance, TStaticArray<double, 36>& OutROS);
 
     /**
-     * geometry_msgs/Twist (ROS body frame) -> FUBotVelocityCommand (UE body axes): linear via VectorROSToUE,
-     * angular via AngularVelocityROSToUE (ROS angular.z = +1 -> UE Z = -1), Source "ROS". No clamping.
+     * geometry_msgs/Twist (ROS body frame) -> FUBotVelocityCommand (UE body axes): linear via VectorToUE,
+     * angular via AngularVelocityToUE (ROS angular.z = +1 -> UE Z = -1), Source "ROS". No clamping.
      */
     FUBotVelocityCommand MakeVelocityCommand(const FUBotRosTwist& Twist, double TimestampSeconds);
 
     /**
      * mavros_msgs/AttitudeTarget -> an attitude command (IGNORE_ATTITUDE clear: orientation from the ROS world
-     * frame to UE through UBot::Ros::RotationROSToUE; body_rate is not used) or a body-rate command
-     * (IGNORE_ATTITUDE set: body_rate FLU -> UE through AngularVelocityROSToUE, ignored axes 0). Thrust
+     * frame to UE through UBot::RightHanded::RotationToUE; body_rate is not used) or a body-rate command
+     * (IGNORE_ATTITUDE set: body_rate FLU -> UE through AngularVelocityToUE, ignored axes 0). Thrust
      * (clamped to 0..1) is used unless IGNORE_THRUST is set; without it the vehicle holds its altitude.
      * Returns false with OutError for non-finite values or an orientation that is not a rotation.
      */

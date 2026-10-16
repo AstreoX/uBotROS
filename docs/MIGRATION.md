@@ -1,3 +1,4 @@
+
 # 从旧插件迁移与输出数据的修正
 
 以下章节原样取自此前的 README。文档站的[从旧插件迁移](https://astreox.github.io/uBotDocs/develop/migration/)是面向用户的版本，这里保留了完整的修正表、重定向清单和迁移注意事项。
@@ -8,13 +9,13 @@
 
 | 项目 | 旧版 | 现在 |
 | --- | --- | --- |
-| 角速度符号 | Odometry 的 `twist.angular` 和 IMU 的 `angular_velocity` 当作普通向量，用 `(x, -y, z)` | 角速度是轴向量，用 `AngularVelocityUEToROS` = `(-x, y, -z)`：UE 里向右偏航现在得到负的 ROS `z`。Odometry 的 6x6 协方差按镜像 `diag(+,-,+,-,+,-)` 换号 |
-| LaserScan | 角度和距离原样发布，而 UE 的扫描角向右为正、ROS 向左为正，所以扫描是镜像的；强度被清空 | `angle_min = YawUEToROS(AngleMax)`、`angle_max = YawUEToROS(AngleMin)`，`ranges` 和 `intensities` 倒序，未命中为 `+inf`，帧里有强度时发布 |
+| 角速度符号 | Odometry 的 `twist.angular` 和 IMU 的 `angular_velocity` 当作普通向量，用 `(x, -y, z)` | 角速度是轴向量，用 `AngularVelocityFromUE` = `(-x, y, -z)`：UE 里向右偏航现在得到负的 ROS `z`。Odometry 的 6x6 协方差按镜像 `diag(+,-,+,-,+,-)` 换号 |
+| LaserScan | 角度和距离原样发布，而 UE 的扫描角向右为正、ROS 向左为正，所以扫描是镜像的；强度被清空 | `angle_min = YawFromUE(AngleMax)`、`angle_max = YawFromUE(AngleMin)`，`ranges` 和 `intensities` 倒序，未命中为 `+inf`，帧里有强度时发布 |
 | PointCloud2 | 字段 `x`、`y`、`z`、`ring`、`time`，`point_step = 18`，没有强度 | 增加 `intensity`（float32，偏移 12），`ring` 在 16、`time` 在 18，`point_step = 22`；没有强度数据时为 0。按 `fields` 里的偏移读取的消费者不受影响，写死偏移的代码需要更新 |
 | 相机坐标系 | Image / CameraInfo 用相机自己的 frame，没有光学系 TF | Image / CameraInfo 使用 `<frame>_optical`，并发布静态 TF `<frame> -> <frame>_optical`；REP-103 约定相机图像使用光学坐标系（z 前、x 右、y 下） |
 | 里程计的静态 TF | 每个传感器（包括里程计传感器）都发布静态 `base_link -> frame`，里程计的 `odom` 与动态 `odom -> base_link` 成环 | 里程计传感器没有静态 TF |
 | `/tf_static` | 每个组件通过自己的 ROS 节点各自发布 | 所有组件合并成一条锁存消息，变化时和重连后重新发布 |
-| 换算 | 旧版转换器里自带 `ConvertVector`、`ConvertQuaternion`、`ConvertTimestamp` | 位置、向量、旋转、角速度、偏航角、变换、时间、协方差全部走 Core 的 `UBot::Ros` / `UBot::Units`，只有一份实现 |
+| 换算 | 旧版转换器里自带 `ConvertVector`、`ConvertQuaternion`、`ConvertTimestamp` | 位置、向量、旋转、角速度、偏航角、变换的轴和单位换算走 Core 的 `UBot::RightHanded` / `UBot::Units`，时间、光学系、名字走本插件的 `UBot::ROSConventions`，协方差换号在 `ConvertCovariance6`；每种换算只有一份实现 |
 | 默认命名空间 | 属性 `RobotNamespace`，默认 `robot` | 来自 uBot 身份（`UBot::Identity`），可由 `RobotNamespaceOverride` 覆盖 |
 | 依赖 | TempoROS（每个组件一个 ROS 节点） | 没有 TempoROS、没有 rclcpp，每个世界一条 TCP 连接，ROS 节点只有桥 |
 

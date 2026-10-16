@@ -3,7 +3,8 @@
 #include "UBot2DLidarFrame.h"
 #include "UBotImageFrame.h"
 #include "UBotPointCloudFrame.h"
-#include "UBotRosConventions.h"
+#include "UBotROSConventionHelpers.h"
+#include "UBotRightHandedConventions.h"
 
 #include <limits>
 
@@ -74,8 +75,8 @@ namespace UBot::ROSConvert
     {
         FUBotRosPoseStamped Result;
         Result.header = MakeHeader(Data.Header, FrameId);
-        Result.pose.position = FUBotRosPoint::FromVector(UBot::Ros::VectorUEToROS(Data.PositionMeters));
-        Result.pose.orientation = FUBotRosQuaternion::FromQuat(UBot::Ros::RotationUEToROS(Data.OrientationQuaternion));
+        Result.pose.position = FUBotRosPoint::FromVector(UBot::RightHanded::VectorFromUE(Data.PositionMeters));
+        Result.pose.orientation = FUBotRosQuaternion::FromQuat(UBot::RightHanded::RotationFromUE(Data.OrientationQuaternion));
         return Result;
     }
 
@@ -84,11 +85,11 @@ namespace UBot::ROSConvert
         FUBotRosOdometry Result;
         Result.header = MakeHeader(Data.Header, OdomFrameId);
         Result.child_frame_id = ChildFrameId;
-        Result.pose.pose.position = FUBotRosPoint::FromVector(UBot::Ros::VectorUEToROS(Data.PositionMeters));
-        Result.pose.pose.orientation = FUBotRosQuaternion::FromQuat(UBot::Ros::RotationUEToROS(Data.OrientationQuaternion));
+        Result.pose.pose.position = FUBotRosPoint::FromVector(UBot::RightHanded::VectorFromUE(Data.PositionMeters));
+        Result.pose.pose.orientation = FUBotRosQuaternion::FromQuat(UBot::RightHanded::RotationFromUE(Data.OrientationQuaternion));
         ConvertCovariance6(Data.PoseCovariance, Result.pose.covariance);
-        Result.twist.twist.linear = FUBotRosVector3::FromVector(UBot::Ros::VectorUEToROS(Data.LinearVelocityLocalMetersPerSecond));
-        Result.twist.twist.angular = FUBotRosVector3::FromVector(UBot::Ros::AngularVelocityUEToROS(Data.AngularVelocityLocalRadPerSecond));
+        Result.twist.twist.linear = FUBotRosVector3::FromVector(UBot::RightHanded::VectorFromUE(Data.LinearVelocityLocalMetersPerSecond));
+        Result.twist.twist.angular = FUBotRosVector3::FromVector(UBot::RightHanded::AngularVelocityFromUE(Data.AngularVelocityLocalRadPerSecond));
         ConvertCovariance6(Data.TwistCovariance, Result.twist.covariance);
         return Result;
     }
@@ -97,11 +98,11 @@ namespace UBot::ROSConvert
     {
         FUBotRosImu Result;
         Result.header = MakeHeader(Data.Header, FrameId);
-        Result.orientation = FUBotRosQuaternion::FromQuat(UBot::Ros::RotationUEToROS(Data.OrientationQuaternion));
+        Result.orientation = FUBotRosQuaternion::FromQuat(UBot::RightHanded::RotationFromUE(Data.OrientationQuaternion));
         Private::FillDiagonal3(Data.OrientationVariance, Result.orientation_covariance);
-        Result.angular_velocity = FUBotRosVector3::FromVector(UBot::Ros::AngularVelocityUEToROS(Data.AngularVelocityRadPerSecond));
+        Result.angular_velocity = FUBotRosVector3::FromVector(UBot::RightHanded::AngularVelocityFromUE(Data.AngularVelocityRadPerSecond));
         Private::FillDiagonal3(Data.AngularVelocityVariance, Result.angular_velocity_covariance);
-        Result.linear_acceleration = FUBotRosVector3::FromVector(UBot::Ros::VectorUEToROS(Data.LinearAccelerationMetersPerSecondSquared));
+        Result.linear_acceleration = FUBotRosVector3::FromVector(UBot::RightHanded::VectorFromUE(Data.LinearAccelerationMetersPerSecondSquared));
         Private::FillDiagonal3(Data.LinearAccelerationVariance, Result.linear_acceleration_covariance);
         return Result;
     }
@@ -118,8 +119,8 @@ namespace UBot::ROSConvert
         Scan.header = MakeHeader(Frame.Header, FrameId);
         // UE sample k looks along AngleMin + k * Increment, positive to the right. Mirrored into ROS
         // (positive to the left) the last UE sample has the smallest ROS angle, so the scan starts there.
-        Scan.angle_min = static_cast<float>(UBot::Ros::YawUEToROS(Frame.AngleMaxRadians));
-        Scan.angle_max = static_cast<float>(UBot::Ros::YawUEToROS(Frame.AngleMinRadians));
+        Scan.angle_min = static_cast<float>(UBot::RightHanded::YawFromUE(Frame.AngleMaxRadians));
+        Scan.angle_max = static_cast<float>(UBot::RightHanded::YawFromUE(Frame.AngleMinRadians));
         Scan.angle_increment = Frame.AngleIncrementRadians;
         Scan.time_increment = SampleCount > 1 ? Frame.ScanPeriodSeconds / static_cast<float>(SampleCount - 1) : 0.0f;
         Scan.scan_time = Frame.ScanPeriodSeconds;
@@ -176,7 +177,7 @@ namespace UBot::ROSConvert
         uint8* Record = Cloud.data.GetData();
         for (int32 Index = 0; Index < PointCount; ++Index, Record += PointCloudPointStep)
         {
-            const FVector RosPoint = UBot::Ros::VectorUEToROS(Points[Index]);
+            const FVector RosPoint = UBot::RightHanded::VectorFromUE(Points[Index]);
             const float X = static_cast<float>(RosPoint.X);
             const float Y = static_cast<float>(RosPoint.Y);
             const float Z = static_cast<float>(RosPoint.Z);
@@ -271,7 +272,7 @@ namespace UBot::ROSConvert
 
     FUBotRosTransformStamped MakeTransform(const FTransform& ParentFromChildUE, double StampSeconds, const FString& ParentFrame, const FString& ChildFrame)
     {
-        const FTransform ParentFromChildROS = UBot::Ros::TransformUEToROS(ParentFromChildUE);
+        const FTransform ParentFromChildROS = UBot::RightHanded::TransformFromUE(ParentFromChildUE);
 
         FUBotRosTransformStamped Result;
         Result.header.stamp = FUBotRosTime::FromSeconds(StampSeconds);
@@ -289,7 +290,7 @@ namespace UBot::ROSConvert
         Result.header.frame_id = CameraFrame;
         Result.child_frame_id = OpticalFrame;
         Result.transform.translation = FUBotRosVector3::FromVector(FVector::ZeroVector);
-        Result.transform.rotation = FUBotRosQuaternion::FromQuat(UBot::Ros::CameraLinkToOpticalRotation());
+        Result.transform.rotation = FUBotRosQuaternion::FromQuat(UBot::ROSConventions::CameraLinkToOpticalRotation());
         return Result;
     }
 
@@ -313,8 +314,8 @@ namespace UBot::ROSConvert
         static const FName RosSource(TEXT("ROS"));
 
         FUBotVelocityCommand Command;
-        Command.LinearVelocityMetersPerSecond = UBot::Ros::VectorROSToUE(Twist.linear.ToVector());
-        Command.AngularVelocityRadiansPerSecond = UBot::Ros::AngularVelocityROSToUE(Twist.angular.ToVector());
+        Command.LinearVelocityMetersPerSecond = UBot::RightHanded::VectorToUE(Twist.linear.ToVector());
+        Command.AngularVelocityRadiansPerSecond = UBot::RightHanded::AngularVelocityToUE(Twist.angular.ToVector());
         Command.TimestampSeconds = TimestampSeconds;
         Command.Source = RosSource;
         return Command;
@@ -361,7 +362,7 @@ namespace UBot::ROSConvert
                 Rates.Z = 0.0;
             }
             OutBodyRate = FUBotBodyRateCommand();
-            OutBodyRate.BodyRateRadiansPerSecond = UBot::Ros::AngularVelocityROSToUE(Rates);
+            OutBodyRate.BodyRateRadiansPerSecond = UBot::RightHanded::AngularVelocityToUE(Rates);
             OutBodyRate.bUseThrust = bUseThrust;
             OutBodyRate.NormalizedThrust = Thrust;
             OutBodyRate.TimestampSeconds = TimestampSeconds;
@@ -379,7 +380,7 @@ namespace UBot::ROSConvert
             return Fail(TEXT("orientation is not a rotation (zero quaternion)"));
         }
         OutAttitude = FUBotAttitudeCommand();
-        OutAttitude.Orientation = UBot::Ros::RotationROSToUE(Orientation.GetNormalized());
+        OutAttitude.Orientation = UBot::RightHanded::RotationToUE(Orientation.GetNormalized());
         OutAttitude.bUseThrust = bUseThrust;
         OutAttitude.NormalizedThrust = Thrust;
         OutAttitude.TimestampSeconds = TimestampSeconds;

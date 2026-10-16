@@ -8,10 +8,10 @@
 #include "UBotOdometrySensorComponent.h"
 #include "UBotROS.h"
 #include "UBotROSBridgeSubsystem.h"
+#include "UBotROSConventionHelpers.h"
 #include "UBotROSConverters.h"
 #include "UBotROSMessageTypes.h"
 #include "UBotROSSensorPublisher.h"
-#include "UBotRosConventions.h"
 #include "UBotSensorInterface.h"
 #include "UBotUnits.h"
 #include "UObject/WeakObjectPtr.h"
@@ -215,7 +215,7 @@ bool UUBotROSSensorBridgeComponent::ConfigurePublishers(FString& OutError)
             return false;
         }
 
-        const FString SensorToken = UBot::Ros::SanitizeRosName(RawSensorId);
+        const FString SensorToken = UBot::ROSConventions::SanitizeRosName(RawSensorId);
         TSet<FString>& Tokens = SensorTokensPerFactory.FindOrAdd(Candidate.FactoryName);
         if (Tokens.Contains(SensorToken))
         {

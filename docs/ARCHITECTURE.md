@@ -38,15 +38,17 @@ UBotROS 插件 ──TCP 8268──▶ ubot_ros_bridge (rclpy) ──▶ ROS 2 �
 
 ## 在 uBot 系列中的位置
 
-UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.2` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
+UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.3` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
 
 | Package | 层 | 作用 |
 | --- | --- | --- |
-| `UBotCore` | Foundation | 帧头、仿真时钟 `UBot::Clock`、坐标 / 单位 / 时间约定 `UBot::Ros` 与 `UBot::Units`、身份组件、扩展注册表 |
+| `UBotCore` | Foundation | 帧头、仿真时钟 `UBot::Clock`、UE 与右手系（FLU，SI 单位）之间的坐标换算 `UBot::RightHanded`、单位 `UBot::Units`、身份组件、扩展注册表 |
 | `UBotSensor` | Capability | 位姿、里程计、IMU、2D / 3D 激光雷达、RGB / 深度相机 |
 | `UBotROS` | Adapter | 本插件：把上面两个 Package 的数据翻译成 ROS 2 |
 
-所有坐标、单位和时间换算都走 Core 的 `UBot::Ros` / `UBot::Units`，插件内没有自己的换算公式。`"UBot"` 块声明的能力键（`Provides`）：`ROS.SensorPublishing`、`ROS.TF`、`ROS.Clock`、`ROS.VelocityCommand`。引擎模块依赖：公有 `Core`、`CoreUObject`、`Engine`、`DeveloperSettings`，私有 `Sockets`、`Networking`、`Json`。
+坐标轴和单位的换算用 Core 的 `UBot::RightHanded` / `UBot::Units`，不在本插件里重复实现；只有 ROS 才有的部分在本插件的 `UBot::ROSConventions`：`builtin_interfaces/Time` 的秒拆分、相机光学系、ROS 名字合法化。另有两条本插件自己的规则：6x6 协方差的换号（`ConvertCovariance6`）和 LaserScan 的样本倒序（`MakeLaserScan`）。详见文档站的[坐标系与单位](https://astreox.github.io/uBotDocs/concepts/coordinates-and-units/)。
+
+`"UBot"` 块声明的能力键（`Provides`）共 6 个：`ROS.SensorPublishing`、`ROS.TF`、`ROS.Clock`、`ROS.VelocityCommand`、`ROS.AttitudeCommand`、`ROS.MotorCommand`。引擎模块依赖：公有 `Core`、`CoreUObject`、`Engine`、`DeveloperSettings`，私有 `Sockets`、`Networking`、`Json`。
 
 ## 运行时状态与问题
 

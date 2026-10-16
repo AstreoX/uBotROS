@@ -12,12 +12,12 @@
 #include "Sockets.h"
 #include "SocketTypes.h"
 #include "UBotROSBridgeSubsystem.h"
+#include "UBotROSConventionHelpers.h"
 #include "UBotROSMessageTypes.h"
 #include "UBotROSProtocol.h"
 #include "UBotROSRuntimeStatus.h"
 #include "UBotROSSettings.h"
 #include "UBotROSTypes.h"
-#include "UBotRosConventions.h"
 #include "UBotRuntimeStatus.h"
 
 namespace UBotROSSubsystemTests
@@ -1147,7 +1147,7 @@ bool FUBotROSSubsystemClockTest::RunTest(const FString& Parameters)
     {
         int32 ExpectedSec = 0;
         uint32 ExpectedNanosec = 0;
-        UBot::Ros::SecondsToRosTime(Scope.Get()->GetTimeSeconds(), ExpectedSec, ExpectedNanosec);
+        UBot::ROSConventions::SecondsToRosTime(Scope.Get()->GetTimeSeconds(), ExpectedSec, ExpectedNanosec);
         TestEqual(TEXT("clock.sec"), Clock.clock.sec, ExpectedSec);
         TestEqual(TEXT("clock.nanosec"), Clock.clock.nanosec, ExpectedNanosec);
     }

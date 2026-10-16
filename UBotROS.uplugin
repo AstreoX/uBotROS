@@ -1,7 +1,7 @@
 {
     "FileVersion": 3,
-    "Version": 3,
-    "VersionName": "0.1.2",
+    "Version": 4,
+    "VersionName": "0.1.3",
     "FriendlyName": "uBot ROS",
     "Description": "uBot ROS 2 adapter: publishes uBot sensors, TF and /clock and accepts velocity commands over a lightweight TCP bridge (ubot_ros_bridge, included). No third-party UE dependencies.",
     "Category": "uBot",
@@ -33,7 +33,7 @@
         "Requires": [
             {
                 "Name": "UBotCore",
-                "Version": "^0.1.2"
+                "Version": "^0.1.3"
             },
             {
                 "Name": "UBotSensor",

@@ -1,6 +1,6 @@
 #include "UBotROSMessageTypes.h"
 
-#include "UBotRosConventions.h"
+#include "UBotROSConventionHelpers.h"
 
 namespace UBotROSMessageTypesPrivate
 {
@@ -52,13 +52,13 @@ namespace UBotROSMessageTypesPrivate
 FUBotRosTime FUBotRosTime::FromSeconds(double Seconds)
 {
     FUBotRosTime Result;
-    UBot::Ros::SecondsToRosTime(Seconds, Result.sec, Result.nanosec);
+    UBot::ROSConventions::SecondsToRosTime(Seconds, Result.sec, Result.nanosec);
     return Result;
 }
 
 double FUBotRosTime::ToSeconds() const
 {
-    return UBot::Ros::RosTimeToSeconds(sec, nanosec);
+    return UBot::ROSConventions::RosTimeToSeconds(sec, nanosec);
 }
 
 void FUBotRosTime::Serialize(FUBotCdrWriter& Writer) const

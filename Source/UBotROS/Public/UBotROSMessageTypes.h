@@ -11,7 +11,8 @@
  * files obvious. Defaults are the ROS defaults (zero, empty, identity quaternion).
  *
  * The structs hold ROS data: values are expected in ROS conventions (meters, radians, REP-103 axes).
- * Converting from UE is the caller's job (UBot::Ros / UBot::Units); the FromVector / FromQuat helpers
+ * Converting from UE is the caller's job (UBot::RightHanded / UBot::Units from uBotCore, and
+ * UBot::ROSConventions for time and names); the FromVector / FromQuat helpers
  * below copy components verbatim and perform no conversion.
  *
  * Every struct provides:
@@ -32,10 +33,10 @@ struct UBOTROS_API FUBotRosTime
         return TEXT("builtin_interfaces/msg/Time");
     }
 
-    /** Seconds -> (sec, nanosec) through UBot::Ros::SecondsToRosTime (negative or non-finite -> 0). */
+    /** Seconds -> (sec, nanosec) through UBot::ROSConventions::SecondsToRosTime (negative or non-finite -> 0). */
     static FUBotRosTime FromSeconds(double Seconds);
 
-    /** (sec, nanosec) -> seconds through UBot::Ros::RosTimeToSeconds. */
+    /** (sec, nanosec) -> seconds through UBot::ROSConventions::RosTimeToSeconds. */
     double ToSeconds() const;
 
     void Serialize(FUBotCdrWriter& Writer) const;
