@@ -7,7 +7,7 @@
 
 ### UE 自动化测试
 
-测试名都以 `UBotROS.` 开头，共 87 项，分类为 `Cdr`（26，其中 `Cdr.Golden.*` 18 项）、`Convert`（17）、`Conventions`（4）、`Protocol`（4）、`Subsystem`（14）、`Factories`（3）、`SensorBridge`（3）、`VelocityCommand`（9）、`AttitudeCommand` 与 `MotorCommand`（共 3）、`Redirects`（2）和 `EndToEnd`（2）：
+测试名都以 `UBotROS.` 开头，分类为 `Cdr`、`Convert`、`Conventions`、`Protocol`、`Subsystem`、`Factories`、`SensorBridge`、`VelocityCommand`、`AttitudeCommand` 与 `MotorCommand`、`Redirects` 和 `EndToEnd`：
 
 - `Cdr.*`：基本类型、对齐、字符串、序列、数组、读取越界保护；`Cdr.Golden.*` 把 `FUBotRos*` 结构编码后与 `rclpy.serialization.serialize_message` 生成的字节逐字节比较（`Time`、`Header`、`Imu`、`Odometry`、`LaserScan`、`PointCloud2`、`Image`、`CameraInfo`、`TfMessage`、`Clock`、`Twist`、`AttitudeTarget`、`Actuators`），`Twist` 还做解码往返。参考数据由 `ros2/tools/gen_golden.py` 在 ROS 2 环境里生成到 `Private/Tests/UBotROSGoldenData.h`（rmw_fastrtps 不初始化对齐填充，生成器会标出哪些字节是填充）。
 - `Convert.*`：角速度符号、LaserScan 镜像（UE +30° 对应 ROS −30°）、PointCloud2 布局、协方差符号、Image / CameraInfo、光学系 TF、速度 / 姿态 / 电机指令换算。
@@ -17,7 +17,7 @@
 - `Factories.*`、`SensorBridge.*`、`VelocityCommand.*`、`AttitudeCommand.*`、`MotorCommand.*`、`Redirects.*`：工厂选择与优先级、话题与 TF、配置校验、限速 / 超时 / 目标选择、姿态与电机指令的分发和超时、CoreRedirects 与 QoS 迁移。
 - `EndToEnd.Bridge`、`EndToEnd.FlightCommands`：需要真实的桥，未设置环境变量（分别是 `UBOT_ROS_E2E=1` 和 `UBOT_ROS_E2E_FLIGHT=1`）时直接通过并输出一条提示。
 
-在启用了 UBotCore、UBotSensor、UBotROS 的工程里，用带编辑器上下文的 `UnrealEditor` 运行。编辑器内：`Tools` 菜单打开 Session Frontend 的 Automation 标签页，过滤 `UBotROS`。命令行（开发宿主工程是 `DevHost/UBotDev.uproject`）：
+在启用了 UBotCore、UBotSensor、UBotROS 的工程里，用带编辑器上下文的 `UnrealEditor` 运行。编辑器内：`Tools` 菜单打开 Session Frontend 的 Automation 标签页，过滤 `UBotROS`。命令行（`<Project>\<Project>.uproject` 换成你工程的目录和 `.uproject` 文件）：
 
 ```powershell
 & '<UE_5.5>\Engine\Binaries\Win64\UnrealEditor-Cmd.exe' '<Project>\<Project>.uproject' -unattended -nop4 -nosplash -NullRHI '-ExecCmds=Automation RunTests UBotROS; Quit' '-TestExit=Automation Test Queue Empty'
@@ -27,7 +27,7 @@
 
 ### Python 测试（桥）
 
-在 WSL（Ubuntu-22.04，ROS 2 Humble）里运行，共 77 项：`test_protocol.py`（45，纯协议，不需要 ROS 图）、`test_bridge_loopback.py`（27，启动真实的桥进程，用 Python 客户端说协议并用 rclpy 验证发布 / 订阅）、`test_bridge_inprocess.py`（5，桥在测试进程内运行，用于执行器卡死、线程创建失败等故障注入）。
+在 WSL（Ubuntu-22.04，ROS 2 Humble）里运行：`test_protocol.py`（纯协议，不需要 ROS 图）、`test_bridge_loopback.py`（启动真实的桥进程，用 Python 客户端说协议并用 rclpy 验证发布 / 订阅）、`test_bridge_inprocess.py`（桥在测试进程内运行，用于执行器卡死、线程创建失败等故障注入）。
 
 ```bash
 wsl.exe -d Ubuntu-22.04 -e bash -lc 'source /opt/ros/humble/setup.bash; cd <plugin>/ros2/ubot_ros_bridge && python3 -m pytest -q test'
