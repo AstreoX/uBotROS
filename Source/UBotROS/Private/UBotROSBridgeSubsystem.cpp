@@ -18,10 +18,10 @@
 #include "SocketTypes.h"
 #include "UBotClock.h"
 #include "UBotROS.h"
+#include "UBotROSConventionHelpers.h"
 #include "UBotROSProtocol.h"
 #include "UBotROSRuntimeStatus.h"
 #include "UBotROSSettings.h"
-#include "UBotRosConventions.h"
 
 #include <atomic>
 
@@ -1667,7 +1667,7 @@ void UUBotROSBridgeSubsystem::UpdateClock()
     }
 
     FUBotRosClock Message;
-    UBot::Ros::SecondsToRosTime(UBot::Clock::GetSimTimeSeconds(GetWorld()), Message.clock.sec, Message.clock.nanosec);
+    UBot::ROSConventions::SecondsToRosTime(UBot::Clock::GetSimTimeSeconds(GetWorld()), Message.clock.sec, Message.clock.nanosec);
     Publish(ClockPublisherId, UBot::Ros::Encode(Message));
 }
 

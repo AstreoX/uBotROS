@@ -17,7 +17,7 @@
 #include "UBotPointCloudFrame.h"
 #include "UBotROSConverters.h"
 #include "UBotROSMessageTypes.h"
-#include "UBotRosConventions.h"
+#include "UBotRightHandedConventions.h"
 #include "UBotSensorTypes.h"
 #include "UBotTypes.h"
 #include "UBotUnits.h"
@@ -941,9 +941,9 @@ bool FUBotROSConvertVelocityCommandTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("Timestamp is passed through"), Command.TimestampSeconds, 3.5, 0.0);
     TestTrue(TEXT("Source is ROS"), Command.Source == FName(TEXT("ROS")));
 
-    // Mapping back with the UE -> ROS conventions restores the twist.
-    TestEqual(TEXT("Linear round trip"), UBot::Ros::VectorUEToROS(Command.LinearVelocityMetersPerSecond), FVector(1.5, 1.0, 0.25), 1.e-9f);
-    TestEqual(TEXT("Angular round trip"), UBot::Ros::AngularVelocityUEToROS(Command.AngularVelocityRadiansPerSecond), FVector(0.1, 0.2, 1.0), 1.e-9f);
+    // Mapping back with the UE -> right-handed conventions restores the twist.
+    TestEqual(TEXT("Linear round trip"), UBot::RightHanded::VectorFromUE(Command.LinearVelocityMetersPerSecond), FVector(1.5, 1.0, 0.25), 1.e-9f);
+    TestEqual(TEXT("Angular round trip"), UBot::RightHanded::AngularVelocityFromUE(Command.AngularVelocityRadiansPerSecond), FVector(0.1, 0.2, 1.0), 1.e-9f);
     return true;
 }
 
@@ -974,7 +974,7 @@ bool FUBotROSConvertAttitudeTargetTest::RunTest(const FString& Parameters)
     // Any rotation goes through the uBotCore conventions.
     Target.orientation = FUBotRosQuaternion::FromQuat(FQuat(FVector::ForwardVector, 0.3));
     UBot::ROSConvert::MakeAttitudeTargetCommand(Target, 0.0, bBodyRate, Attitude, Rates);
-    TestTrue(TEXT("Rotation through RotationROSToUE"), Attitude.Orientation.Equals(UBot::Ros::RotationROSToUE(FQuat(FVector::ForwardVector, 0.3)), 1e-12));
+    TestTrue(TEXT("Rotation through RotationToUE"), Attitude.Orientation.Equals(UBot::RightHanded::RotationToUE(FQuat(FVector::ForwardVector, 0.3)), 1e-12));
 
     // Without thrust the vehicle holds its altitude; thrust is clamped.
     Target.type_mask = FUBotRosAttitudeTarget::IGNORE_THRUST;

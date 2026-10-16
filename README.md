@@ -44,15 +44,17 @@ UBotROS 插件 ──TCP 8268──▶ ubot_ros_bridge (rclpy) ──▶ ROS 2 �
 
 ## 在 uBot 家族中的位置
 
-UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.2` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
+UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.3` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
 
 | Package | 层 | 作用 |
 | --- | --- | --- |
-| `UBotCore` | Foundation | 帧头、仿真时钟 `UBot::Clock`、坐标 / 单位 / 时间约定 `UBot::Ros` 与 `UBot::Units`、身份组件、扩展注册表 |
+| `UBotCore` | Foundation | 帧头、仿真时钟 `UBot::Clock`、UE 与右手系（FLU，SI 单位）之间的坐标换算 `UBot::RightHanded`、单位 `UBot::Units`、身份组件、扩展注册表 |
 | `UBotSensor` | Capability | 位姿、里程计、IMU、2D / 3D 激光雷达、RGB / 深度相机 |
 | `UBotROS` | Adapter | 本插件：把上面两个 Package 的数据翻译成 ROS 2 |
 
-所有坐标、单位和时间换算都走 Core 的 `UBot::Ros` / `UBot::Units`，插件内没有自己的换算公式。`"UBot"` 块声明的能力键（`Provides`）：`ROS.SensorPublishing`、`ROS.TF`、`ROS.Clock`、`ROS.VelocityCommand`。引擎模块依赖：公有 `Core`、`CoreUObject`、`Engine`、`DeveloperSettings`，私有 `Sockets`、`Networking`、`Json`。
+坐标轴和单位的换算用 Core 的 `UBot::RightHanded` / `UBot::Units`，不在本插件里重复实现；只有 ROS 才有的部分在本插件的 `UBot::ROSConventions`：`builtin_interfaces/Time` 的秒拆分、相机光学系、ROS 名字合法化。另有两条本插件自己的规则：6x6 协方差的换号（`ConvertCovariance6`）和 LaserScan 的样本倒序（`MakeLaserScan`）。详见“坐标与时间约定”一节。
+
+`"UBot"` 块声明的能力键（`Provides`）共 6 个：`ROS.SensorPublishing`、`ROS.TF`、`ROS.Clock`、`ROS.VelocityCommand`、`ROS.AttitudeCommand`、`ROS.MotorCommand`。引擎模块依赖：公有 `Core`、`CoreUObject`、`Engine`、`DeveloperSettings`，私有 `Sockets`、`Networking`、`Json`。
 
 ## 安装
 
@@ -222,12 +224,12 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268
 
 消息要点：
 
-- 时间戳都是传感器采样时的仿真时间（见“时间”一节），经 `UBot::Ros::SecondsToRosTime` 转成 `builtin_interfaces/Time`。
-- **PointCloud2**：无组织点云（`height = 1`），字段 `x`、`y`、`z`（float32，偏移 0 / 4 / 8）、`intensity`（float32，12）、`ring`（uint16，16）、`time`（float32，18），`point_step = 22`，小端；点经 `VectorUEToROS`；帧不含强度时 `intensity` 为 0；所有坐标有限时 `is_dense = true`。
+- 时间戳都是传感器采样时的仿真时间（见“时间”一节），经 `UBot::ROSConventions::SecondsToRosTime` 转成 `builtin_interfaces/Time`。
+- **PointCloud2**：无组织点云（`height = 1`），字段 `x`、`y`、`z`（float32，偏移 0 / 4 / 8）、`intensity`（float32，12）、`ring`（uint16，16）、`time`（float32，18），`point_step = 22`，小端；点经 `VectorFromUE`（y 取反）；帧不含强度时 `intensity` 为 0；所有坐标有限时 `is_dense = true`。
 - **LaserScan**：按 ROS 约定镜像（角度向左为正），未命中的样本为 `+inf`，帧里有强度时一并发布。
 - **Image / CameraInfo**：RGB 为 `bgra8`（`step = width * 4`），深度为 `32FC1`（米，无效像素为 0）；CameraInfo 是理想针孔相机：`plumb_bob`、`d` 为 5 个 0、`K` / `P` 由 `Fx`、`Fy`、`Cx`、`Cy` 得到、`R` 为单位阵。CPU 像素读回（会同步等待渲染）在 `bSkipWhenNoSubscribers` 开启时只在图像话题有订阅者时才做，读回失败时只记一次 Warning。
-- **Odometry**：位姿和线速度经 `VectorUEToROS` / `RotationUEToROS`，角速度经 `AngularVelocityUEToROS`，两个 6x6 协方差按镜像 `diag(+,-,+,-,+,-)` 换号。
-- **IMU**：朝向、角速度、线加速度分别经 `RotationUEToROS`、`AngularVelocityUEToROS`、`VectorUEToROS`，三个方差填入协方差对角线。
+- **Odometry**：位姿和线速度经 `VectorFromUE` / `RotationFromUE`，角速度经 `AngularVelocityFromUE`，两个 6x6 协方差按镜像 `diag(+,-,+,-,+,-)` 换号。
+- **IMU**：朝向、角速度、线加速度分别经 `RotationFromUE`、`AngularVelocityFromUE`、`VectorFromUE`，三个方差填入协方差对角线。
 
 ### 话题覆盖与校验
 
@@ -247,7 +249,7 @@ map                              由 SLAM / AMCL 发布，UBotROS 不发布
             └── rgb_camera_optical   /tf_static（相机的光学系）
 ```
 
-- **静态 TF** `base -> 传感器`：用 `IUBotSensor::GetSensorFrameComponent` 相对基组件的变换，在组件初始化（以及 `RefreshSensorPublishers`）时计算一次，去掉缩放；之后传感器相对机体移动不会更新。相机另外发布 `<frame> -> <frame>_optical`：零平移，旋转 `UBot::Ros::CameraLinkToOpticalRotation()`，即 `(x=-0.5, y=0.5, z=-0.5, w=0.5)`。
+- **静态 TF** `base -> 传感器`：用 `IUBotSensor::GetSensorFrameComponent` 相对基组件的变换，在组件初始化（以及 `RefreshSensorPublishers`）时计算一次，去掉缩放；之后传感器相对机体移动不会更新。相机另外发布 `<frame> -> <frame>_optical`：零平移，旋转 `UBot::ROSConventions::CameraLinkToOpticalRotation()`，即 `(x=-0.5, y=0.5, z=-0.5, w=0.5)`。
 - **里程计传感器没有静态 TF**：它的 `FrameId`（默认 `odom`）是里程计坐标系，也就是 base 的**父**坐标系，再发布 `base -> odom` 会和动态的 `odom -> base` 成环，并且与 SLAM / AMCL 的 `map -> odom` 打架。其他传感器的 frame 如果恰好等于里程计坐标系，会被跳过并记 Warning；frame 等于基坐标系的传感器不需要静态 TF。
 - **动态 TF** `odom -> base`：取第一个里程计传感器，每个有效样本发布一条到 `/tf`。前提是该传感器跟踪的组件就是基组件，且它的 `OdometryFrameId` / `ChildFrameId` 与组件的 `OdometryFrame` / 基坐标系一致，否则记 Error 并关闭动态 TF（组件仍然 `Ready`）。
 - **`/tf_static` 聚合**：每个 Sensor Bridge 通过 `SetStaticTransforms(Owner, ...)` 登记自己的静态变换，子系统把所有登记者合并成**一条**锁存消息，集合变化时和每次重连后重新发布。多个登记者设置同一个 child frame 时，后注册者的变换生效（内容不同会警告）。
@@ -268,6 +270,39 @@ map                              由 SLAM / AMCL 发布，UBotROS 不发布
 
   新的 PIE 会话把时间重新从 0 开始，对 ROS 来说是时间回跳，TF 缓冲等通常会被清空。桥节点本身不使用时间戳。
 
+## 坐标与时间约定
+
+UE 是左手系（X 前、Y 右、Z 上，厘米），ROS（REP-103）是右手系（X 前、Y 左、Z 上，米、弧度），两者只差一个 Y 轴镜像加单位换算。这些换算分在两个地方：**轴和单位的换算在 uBotCore**（中立，不带 ROS 的名字，别的右手 Z-up 接入点也能用），**只有 ROS 才有的部分在本插件**。
+
+| 内容 | 位置 | 规则 |
+| --- | --- | --- |
+| 位置、线速度、加速度 | uBotCore `UBot::RightHanded::PositionFromUE` / `VectorFromUE`（反向 `PositionToUE` / `VectorToUE`） | `(x, -y, z)`；位置另外厘米换成米 |
+| 角速度、力矩 | uBotCore `AngularVelocityFromUE` / `AngularVelocityToUE` | `(-x, y, -z)` |
+| 旋转 | uBotCore `RotationFromUE` / `RotationToUE` | 归一化的 `(-x, y, -z, w)`，退化输入得到单位四元数 |
+| 变换（TF） | uBotCore `TransformFromUE` / `TransformToUE` | 旋转镜像，厘米换成米，去掉缩放 |
+| 偏航角、扫描角 | uBotCore `YawFromUE` / `YawToUE` | 取反 |
+| `builtin_interfaces/Time` | 本插件 `UBot::ROSConventions::SecondsToRosTime` / `RosTimeToSeconds` | 负数或非有限值得到 `(0, 0)`；纳秒四舍五入并进位；超出 int32 时饱和为 `(2147483647, 999999999)` |
+| 相机光学系 | 本插件 `UBot::ROSConventions::CameraLinkToOpticalRotation` / `OpticalFrameSuffix` | 旋转 `(x=-0.5, y=0.5, z=-0.5, w=0.5)`，frame id 后缀 `_optical` |
+| ROS 名字 | 本插件 `UBot::ROSConventions::SanitizeRosName` | 只保留 `[A-Za-z0-9_]`，其余换成 `_`，合并连续的下划线，首字符是数字时前面加 `_`，空名字得到 `ubot` |
+| 6x6 协方差 | 本插件 `UBot::ROSConvert::ConvertCovariance6`（内部函数） | `C' = S C S`，`S = diag(+,-,+,-,+,-)` |
+| LaserScan 的样本顺序 | 本插件 `UBot::ROSConvert::MakeLaserScan`（内部函数） | 倒序，见“话题与消息” |
+
+C++ 里分别包含 Core 的 `UBotRightHandedConventions.h` 和本插件的 `UBotROSConventionHelpers.h`。本插件 `UBotROSMessageTypes.h` 里的 `UBot::Ros::Encode` / `UBot::Ros::Decode`（CDR 编解码）与这些换算无关，没有变化。发布和接收的数值与 0.1.2 相同，变的只是换算的来源。
+
+### 蓝图节点
+
+本插件的节点在类别 `uBot|ROS|Conventions`（`UUBotROSConventionsLibrary`），都是纯函数：
+
+| 节点 | 作用 |
+| --- | --- |
+| Camera Link To Optical Rotation | 相机光学系（z 前、x 右、y 下）相对相机连杆系的旋转，ROS 约定 |
+| Get Optical Frame Suffix | 光学系 frame id 的后缀 `_optical` |
+| Seconds To ROS Time | 秒换成 `builtin_interfaces/Time` 的 `Sec` 和 `Nanosec` |
+| ROS Time To Seconds | `Sec`、`Nanosec` 换成秒；负的 `Nanosec` 按 0 |
+| Sanitize ROS Name | 把任意文本变成合法的 ROS 名字 |
+
+UE 与右手系之间的轴换算节点在 uBotCore（类别 `uBot|Conventions`，`UE To Right-Handed Position` 等，搜索 `ROS` 也能找到）。uBotCore 0.1.3 起，那里旧的 `UE To ROS …` / `ROS To UE …` 节点已弃用，结果与新节点相同；Core 里的 5 个 ROS 专属节点（相机光学系、时间、名字）也已弃用，它们移到了本插件，名字不变。用着旧节点的蓝图照常运行，编译时会提示弃用，换成新节点即可。
+
 ## 速度指令
 
 **uBot ROS Velocity Command** 订阅 `/<namespace>/cmd_vel`（`RobotNamespaceOverride` 与 Sensor Bridge 规则相同；`CommandTopicOverride` 非空时替代整个话题），QoS 为 best_effort / volatile / 10。它不含控制逻辑，只做解码、换算、限速、分发和超时。
@@ -284,8 +319,8 @@ map                              由 SLAM / AMCL 发布，UBotROS 不发布
 
 | 量 | 映射 | 说明 |
 | --- | --- | --- |
-| `linear` | `(x, y, z)` → `(x, -y, z)` m/s | `VectorROSToUE` |
-| `angular` | `(x, y, z)` → `(-x, y, -z)` rad/s | `AngularVelocityROSToUE`；ROS `angular.z = +0.25`（向左转）对应 UE `Z = -0.25`（UE 里 +Z 是向右偏航） |
+| `linear` | `(x, y, z)` → `(x, -y, z)` m/s | `VectorToUE` |
+| `angular` | `(x, y, z)` → `(-x, y, -z)` rad/s | `AngularVelocityToUE`；ROS `angular.z = +0.25`（向左转）对应 UE `Z = -0.25`（UE 里 +Z 是向右偏航） |
 
 得到的 `FUBotVelocityCommand` 带 `Source = "ROS"` 和接收时的仿真时间。流程：解码（畸形消息或含非有限值的消息被丢弃并触发 `OnCommandError`）→ 换算 → 限速 → 分发给目标的 `ApplyVelocityCommand` → 触发 `OnVelocityCommand`。目标拒绝指令（返回 `false`）只报告一次。没有目标时组件照常解码、触发事件并运行超时，方便用蓝图自己处理。
 
@@ -321,8 +356,8 @@ public:
 
 | `type_mask` | 结果 |
 | --- | --- |
-| 不含 `IGNORE_ATTITUDE`（128） | 姿态指令：`orientation`（ROS 世界系）经 `RotationROSToUE`；`body_rate` 不使用 |
-| 含 `IGNORE_ATTITUDE` | 角速度指令：`body_rate`（FLU）经 `AngularVelocityROSToUE`；带 `IGNORE_ROLL_RATE`（1）、`IGNORE_PITCH_RATE`（2）、`IGNORE_YAW_RATE`（4）的轴为 0 |
+| 不含 `IGNORE_ATTITUDE`（128） | 姿态指令：`orientation`（ROS 世界系）经 `RotationToUE`；`body_rate` 不使用 |
+| 含 `IGNORE_ATTITUDE` | 角速度指令：`body_rate`（FLU）经 `AngularVelocityToUE`；带 `IGNORE_ROLL_RATE`（1）、`IGNORE_PITCH_RATE`（2）、`IGNORE_YAW_RATE`（4）的轴为 0 |
 | 不含 `IGNORE_THRUST`（64） | `thrust`（飞行器最大总推力的比例）截到 0..1 后使用 |
 | 含 `IGNORE_THRUST` | 不给推力，飞行器自己保持高度 |
 
@@ -480,13 +515,13 @@ void FMyRangeROSModule::ShutdownModule()
 
 | 项目 | 旧版 | 现在 |
 | --- | --- | --- |
-| 角速度符号 | Odometry 的 `twist.angular` 和 IMU 的 `angular_velocity` 当作普通向量，用 `(x, -y, z)` | 角速度是轴向量，用 `AngularVelocityUEToROS` = `(-x, y, -z)`：UE 里向右偏航现在得到负的 ROS `z`。Odometry 的 6x6 协方差按镜像 `diag(+,-,+,-,+,-)` 换号 |
-| LaserScan | 角度和距离原样发布，而 UE 的扫描角向右为正、ROS 向左为正，所以扫描是镜像的；强度被清空 | `angle_min = YawUEToROS(AngleMax)`、`angle_max = YawUEToROS(AngleMin)`，`ranges` 和 `intensities` 倒序，未命中为 `+inf`，帧里有强度时发布 |
+| 角速度符号 | Odometry 的 `twist.angular` 和 IMU 的 `angular_velocity` 当作普通向量，用 `(x, -y, z)` | 角速度是轴向量，用 `AngularVelocityFromUE` = `(-x, y, -z)`：UE 里向右偏航现在得到负的 ROS `z`。Odometry 的 6x6 协方差按镜像 `diag(+,-,+,-,+,-)` 换号 |
+| LaserScan | 角度和距离原样发布，而 UE 的扫描角向右为正、ROS 向左为正，所以扫描是镜像的；强度被清空 | `angle_min = YawFromUE(AngleMax)`、`angle_max = YawFromUE(AngleMin)`，`ranges` 和 `intensities` 倒序，未命中为 `+inf`，帧里有强度时发布 |
 | PointCloud2 | 字段 `x`、`y`、`z`、`ring`、`time`，`point_step = 18`，没有强度 | 增加 `intensity`（float32，偏移 12），`ring` 在 16、`time` 在 18，`point_step = 22`；没有强度数据时为 0。按 `fields` 里的偏移读取的消费者不受影响，写死偏移的代码需要更新 |
 | 相机坐标系 | Image / CameraInfo 用相机自己的 frame，没有光学系 TF | Image / CameraInfo 使用 `<frame>_optical`，并发布静态 TF `<frame> -> <frame>_optical`；REP-103 约定相机图像使用光学坐标系（z 前、x 右、y 下） |
 | 里程计的静态 TF | 每个传感器（包括里程计传感器）都发布静态 `base_link -> frame`，里程计的 `odom` 与动态 `odom -> base_link` 成环 | 里程计传感器没有静态 TF |
 | `/tf_static` | 每个组件通过自己的 ROS 节点各自发布 | 所有组件合并成一条锁存消息，变化时和重连后重新发布 |
-| 换算 | 旧版转换器里自带 `ConvertVector`、`ConvertQuaternion`、`ConvertTimestamp` | 位置、向量、旋转、角速度、偏航角、变换、时间、协方差全部走 Core 的 `UBot::Ros` / `UBot::Units`，只有一份实现 |
+| 换算 | 旧版转换器里自带 `ConvertVector`、`ConvertQuaternion`、`ConvertTimestamp` | 位置、向量、旋转、角速度、偏航角、变换的轴和单位换算走 Core 的 `UBot::RightHanded` / `UBot::Units`，时间、光学系、名字走本插件的 `UBot::ROSConventions`，协方差换号在 `ConvertCovariance6`；每种换算只有一份实现 |
 | 默认命名空间 | 属性 `RobotNamespace`，默认 `robot` | 来自 uBot 身份（`UBot::Identity`），可由 `RobotNamespaceOverride` 覆盖 |
 | 依赖 | TempoROS（每个组件一个 ROS 节点） | 没有 TempoROS、没有 rclcpp，每个世界一条 TCP 连接，ROS 节点只有桥 |
 
@@ -533,14 +568,15 @@ UE 与桥之间的 TCP 协议（UBRB v1）完整规范见 [`docs/PROTOCOL.md`](d
 
 ### UE 自动化测试
 
-测试名都以 `UBotROS.` 开头，共 75 项，分类为 `Cdr`（24，其中 `Cdr.Golden.*` 16 项）、`Convert`（15）、`Protocol`（4）、`Subsystem`（14）、`Factories`（3）、`SensorBridge`（3）、`VelocityCommand`（9）、`Redirects`（2）和 `EndToEnd`（1）：
+测试名都以 `UBotROS.` 开头，共 87 项，分类为 `Cdr`（26，其中 `Cdr.Golden.*` 18 项）、`Convert`（17）、`Conventions`（4）、`Protocol`（4）、`Subsystem`（14）、`Factories`（3）、`SensorBridge`（3）、`VelocityCommand`（9）、`AttitudeCommand` 与 `MotorCommand`（共 3）、`Redirects`（2）和 `EndToEnd`（2）：
 
-- `Cdr.*`：基本类型、对齐、字符串、序列、数组、读取越界保护；`Cdr.Golden.*` 把 `FUBotRos*` 结构编码后与 `rclpy.serialization.serialize_message` 生成的字节逐字节比较（`Time`、`Header`、`Imu`、`Odometry`、`LaserScan`、`PointCloud2`、`Image`、`CameraInfo`、`TfMessage`、`Clock`、`Twist` 等），`Twist` 还做解码往返。参考数据由 `ros2/tools/gen_golden.py` 在 ROS 2 环境里生成到 `Private/Tests/UBotROSGoldenData.h`（rmw_fastrtps 不初始化对齐填充，生成器会标出哪些字节是填充）。
-- `Convert.*`：角速度符号、LaserScan 镜像（UE +30° 对应 ROS −30°）、PointCloud2 布局、协方差符号、Image / CameraInfo、光学系 TF、速度指令换算。
+- `Cdr.*`：基本类型、对齐、字符串、序列、数组、读取越界保护；`Cdr.Golden.*` 把 `FUBotRos*` 结构编码后与 `rclpy.serialization.serialize_message` 生成的字节逐字节比较（`Time`、`Header`、`Imu`、`Odometry`、`LaserScan`、`PointCloud2`、`Image`、`CameraInfo`、`TfMessage`、`Clock`、`Twist`、`AttitudeTarget`、`Actuators`），`Twist` 还做解码往返。参考数据由 `ros2/tools/gen_golden.py` 在 ROS 2 环境里生成到 `Private/Tests/UBotROSGoldenData.h`（rmw_fastrtps 不初始化对齐填充，生成器会标出哪些字节是填充）。
+- `Convert.*`：角速度符号、LaserScan 镜像（UE +30° 对应 ROS −30°）、PointCloud2 布局、协方差符号、Image / CameraInfo、光学系 TF、速度 / 姿态 / 电机指令换算。
+- `Conventions.*`：相机光学系旋转（含随机 UE 相机朝向到光学系各轴的检查）和 `_optical` 后缀；`builtin_interfaces/Time` 的秒拆分（进位、饱和、非法输入、往返误差）；ROS 名字合法化（对照表加随机输入，输出必为合法名字）；`uBot|ROS|Conventions` 的 5 个蓝图节点（与 C++ 函数结果一致，类别、显示名和关键字正确）。
 - `Protocol.*`：帧构造、增量解析（拆包、粘包）、非法头部拒绝、名称校验。
 - `Subsystem.*`：对一个进程内的回环 TCP 测试服务器验证握手、声明与发布的帧格式、`SUB_COUNT`、`MESSAGE` 在游戏线程分发、队列策略、重连后重新声明、静态 TF 聚合、`/clock`、主机名解析，以及连接状态发布成运行时状态项和 `rosBridgeUnreachable` 问题（单个世界和多个世界）。
-- `Factories.*`、`SensorBridge.*`、`VelocityCommand.*`、`Redirects.*`：工厂选择与优先级、话题与 TF、配置校验、限速 / 超时 / 目标选择、CoreRedirects 与 QoS 迁移。
-- `EndToEnd.Bridge`：需要真实的桥，未设置环境变量 `UBOT_ROS_E2E=1` 时直接通过并输出一条提示。
+- `Factories.*`、`SensorBridge.*`、`VelocityCommand.*`、`AttitudeCommand.*`、`MotorCommand.*`、`Redirects.*`：工厂选择与优先级、话题与 TF、配置校验、限速 / 超时 / 目标选择、姿态与电机指令的分发和超时、CoreRedirects 与 QoS 迁移。
+- `EndToEnd.Bridge`、`EndToEnd.FlightCommands`：需要真实的桥，未设置环境变量（分别是 `UBOT_ROS_E2E=1` 和 `UBOT_ROS_E2E_FLIGHT=1`）时直接通过并输出一条提示。
 
 在启用了 UBotCore、UBotSensor、UBotROS 的工程里，用带编辑器上下文的 `UnrealEditor` 运行。编辑器内：`Tools` 菜单打开 Session Frontend 的 Automation 标签页，过滤 `UBotROS`。命令行（开发宿主工程是 `DevHost/UBotDev.uproject`）：
 
@@ -578,8 +614,10 @@ $env:UBOT_ROS_E2E = '1'
 
 UE 测试发布 IMU、点云、静态 TF 和 `/clock`，并订阅 `/ubot_e2e/cmd_vel`。检查脚本退出码 0 表示它在 `--timeout` 内收到并核对了 IMU、点云、`/tf_static` 和至少一条 `/clock`；UE 测试在 20 秒内收到脚本发布的 Twist（linear `(1.5, 0, 0)`，angular `(0, 0, 0.25)`）即通过。
 
+`UBotROS.EndToEnd.FlightCommands` 不用检查脚本：桥需要 `mavros_msgs` 和 `actuator_msgs`，在 WSL 里用 `ros2 topic pub` 向 `/ubot_e2e/cmd_attitude` 和 `/ubot_e2e/cmd_motors` 发消息（命令写在该测试的源码注释里），设置 `UBOT_ROS_E2E_FLIGHT=1` 后运行，20 秒内两个组件都收到并换算出正确的指令即通过。
+
 ## 版本与许可
 
-当前版本 **0.1.2**（Beta，`IsBetaVersion`），仓库 <https://github.com/AstreoX/uBotROS>。
+当前版本 **0.1.3**（Beta，`IsBetaVersion`），仓库 <https://github.com/AstreoX/uBotROS>。
 
 Copyright 2026 AstreoX。本项目以 [Apache License 2.0](LICENSE) 发布，可以自由使用、修改和再分发（包括商业用途），再分发时需保留 `LICENSE` 与 `NOTICE` 文件，并注明你修改过的文件。

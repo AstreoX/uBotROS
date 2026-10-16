@@ -21,7 +21,7 @@
 #include "UBotROSMotorCommandComponent.h"
 #include "UBotROSSettings.h"
 #include "UBotROSTypes.h"
-#include "UBotRosConventions.h"
+#include "UBotRightHandedConventions.h"
 #include "UBotSensorTypes.h"
 #include "UBotTypes.h"
 
@@ -211,8 +211,8 @@ namespace UBotROSEndToEndTests
         Data.Header.bValid = true;
         Data.Header.Status = EUBotSampleStatus::Valid;
         Data.OrientationQuaternion = FQuat::Identity;
-        Data.AngularVelocityRadPerSecond = UBot::Ros::AngularVelocityROSToUE(ImuAngularVelocityROS);
-        Data.LinearAccelerationMetersPerSecondSquared = UBot::Ros::VectorROSToUE(ImuLinearAccelerationROS);
+        Data.AngularVelocityRadPerSecond = UBot::RightHanded::AngularVelocityToUE(ImuAngularVelocityROS);
+        Data.LinearAccelerationMetersPerSecondSquared = UBot::RightHanded::VectorToUE(ImuLinearAccelerationROS);
 
         OutImu = UBot::ROSConvert::MakeImu(Data, ImuFrameId);
 

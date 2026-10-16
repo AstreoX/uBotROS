@@ -3,8 +3,8 @@
 #include "Algo/StableSort.h"
 #include "UBotROS.h"
 #include "UBotROSBridgeSubsystem.h"
+#include "UBotROSConventionHelpers.h"
 #include "UBotROSProtocol.h"
-#include "UBotRosConventions.h"
 #include "UBotSensorInterface.h"
 #include "UBotTypes.h"
 
@@ -85,12 +85,12 @@ TArray<FString> UUBotROSSensorPublisher::GetTopics() const
 
 FString UUBotROSSensorPublisher::GetSensorToken() const
 {
-    return UBot::Ros::SanitizeRosName(RawSensorId);
+    return UBot::ROSConventions::SanitizeRosName(RawSensorId);
 }
 
 FString UUBotROSSensorPublisher::GetOpticalFrameId() const
 {
-    return SensorFrameId + UBot::Ros::OpticalFrameSuffix();
+    return SensorFrameId + UBot::ROSConventions::OpticalFrameSuffix();
 }
 
 int32 UUBotROSSensorPublisher::AdvertiseTopic(const FString& LogicalKey, const FString& DefaultRelativePath, const FString& MessageType, const FUBotROSQos& Qos, FString& OutError)
@@ -239,7 +239,7 @@ namespace UBot::ROSPublishing
             {
                 Result.AppendChar(TEXT('/'));
             }
-            Result += UBot::Ros::SanitizeRosName(Trimmed);
+            Result += UBot::ROSConventions::SanitizeRosName(Trimmed);
         }
         return Result;
     }

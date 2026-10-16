@@ -22,13 +22,13 @@
 #include "UBotRgbCameraSensorComponent.h"
 #include "UBotROSBridgeSubsystem.h"
 #include "UBotROSBuiltinPublishers.h"
+#include "UBotROSConventionHelpers.h"
 #include "UBotROSLegacyTestTypes.h"
 #include "UBotROSMessageTypes.h"
 #include "UBotROSSensorBridgeComponent.h"
 #include "UBotROSSensorPublisher.h"
 #include "UBotROSSettings.h"
 #include "UBotROSTypes.h"
-#include "UBotRosConventions.h"
 #include "UBotSensorComponent.h"
 #include "UObject/CoreRedirects.h"
 #include "UObject/Package.h"
@@ -551,7 +551,7 @@ bool FUBotROSSensorBridgeTopicsTest::RunTest(const FString& Parameters)
         }
         if (const FUBotRosTransformStamped* OpticalTf = FindStaticTransform(Transforms, TEXT("cam_optical")))
         {
-            const FQuat Expected = UBot::Ros::CameraLinkToOpticalRotation();
+            const FQuat Expected = UBot::ROSConventions::CameraLinkToOpticalRotation();
             TestEqualSensitive(TEXT("Optical TF parent"), *OpticalTf->header.frame_id, TEXT("cam"));
             TestEqual(TEXT("Optical TF qx"), OpticalTf->transform.rotation.x, Expected.X, 1.e-9);
             TestEqual(TEXT("Optical TF qy"), OpticalTf->transform.rotation.y, Expected.Y, 1.e-9);
@@ -827,7 +827,7 @@ bool FUBotROSSensorBridgeValidationTest::RunTest(const FString& Parameters)
         if (TestNotNull(TEXT("Robot spawned"), Robot.BridgeComponent))
         {
             TestEqualSensitive(TEXT("Identity namespace"), *Robot.BridgeComponent->GetResolvedNamespace(),
-                *UBot::ROSPublishing::SanitizeRosPath(UBot::Ros::SanitizeRosName(Robot.Actor->GetName())));
+                *UBot::ROSPublishing::SanitizeRosPath(UBot::ROSConventions::SanitizeRosName(Robot.Actor->GetName())));
         }
     }
 

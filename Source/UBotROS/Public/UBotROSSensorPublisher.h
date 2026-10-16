@@ -98,7 +98,7 @@ public:
     /** Context.ResolveFrameId(IUBotSensor::GetSensorFrameId): the sensor frame used in headers and TF. */
     const FString& GetSensorFrameId() const { return SensorFrameId; }
 
-    /** GetSensorFrameId() + UBot::Ros::OpticalFrameSuffix(). */
+    /** GetSensorFrameId() + UBot::ROSConventions::OpticalFrameSuffix(). */
     FString GetOpticalFrameId() const;
 
     bool IsPublisherInitialized() const { return bPublisherInitialized; }
@@ -195,7 +195,7 @@ namespace UBot::ROSPublishing
 
     /**
      * ROS name path: whitespace trimmed, '\' treated as '/', empty segments dropped and every segment
-     * passed through UBot::Ros::SanitizeRosName. "  /Fleet//robot-1/ " -> "Fleet/robot_1". Empty input -> "".
+     * passed through UBot::ROSConventions::SanitizeRosName. "  /Fleet//robot-1/ " -> "Fleet/robot_1". Empty input -> "".
      */
     UBOTROS_API FString SanitizeRosPath(const FString& Path);
 
