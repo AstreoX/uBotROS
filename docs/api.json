@@ -96,7 +96,7 @@
             "const": false
           },
           "default": "0.500000",
-          "category": "uBot|ROS|Command|Safety",
+          "category": "ROS|Command|Safety",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Sim seconds without a command before the target is released. 0 disables the timeout.",
@@ -118,7 +118,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot|ROS|Command|Topic",
+          "category": "ROS|Command|Topic",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Non-empty -> used instead of /<namespace>/<leaf>. A missing leading '/' is added.",
@@ -137,7 +137,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot|ROS|Command|Identity",
+          "category": "ROS|Command|Identity",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Empty -> the namespace resolved by UBot::Identity (identity component, else the sanitized actor name).\nLeading/trailing '/' are ignored and every segment is sanitized; a value made only of '/' selects the\nroot namespace.",
@@ -156,7 +156,7 @@
             "const": false
           },
           "default": "()",
-          "category": "uBot|ROS|Command|Target",
+          "category": "ROS|Command|Target",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Component that receives the commands; it must implement the subclass' interface. Unset -> the owner actor\nor its first implementing component. With only \"Referenced Actor\" set, that actor is searched the same way.",
@@ -175,7 +175,7 @@
             "const": false
           },
           "default": "True",
-          "category": "uBot|ROS|Command",
+          "category": "ROS|Command",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Subscribe in BeginPlay. When false, call Restart Command Receiver to start receiving.",
@@ -272,7 +272,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot ROS|Identity",
+          "category": "ROS|Identity",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Empty -> base frame of the owner's uBot identity (default \"base_link\").",
@@ -291,7 +291,7 @@
             "const": false
           },
           "default": "()",
-          "category": "uBot ROS|Identity",
+          "category": "ROS|Identity",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Empty or unresolved -> base component of the owner's uBot identity (default: root component).",
@@ -310,7 +310,7 @@
             "const": false
           },
           "default": "odom",
-          "category": "uBot ROS|TF",
+          "category": "ROS|TF",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "",
@@ -329,7 +329,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot ROS|Identity",
+          "category": "ROS|Identity",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Blank -> namespace of the owner's uBot identity (UBot::Identity::ResolveNamespace); \"/\" alone -> root\nnamespace (topics like \"/imu/data\"). '/' separates nested namespaces; every segment is sanitized.",
@@ -348,7 +348,7 @@
             "const": false
           },
           "default": "(Qos=(Depth=5))",
-          "category": "uBot ROS|QoS",
+          "category": "ROS|QoS",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Overrides the sensor data QoS (default best_effort / volatile / 5).",
@@ -367,7 +367,7 @@
             "const": false
           },
           "default": "(Qos=(Depth=5))",
-          "category": "uBot ROS|QoS",
+          "category": "ROS|QoS",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Overrides the state QoS of pose and odometry (default reliable / volatile / 10).",
@@ -394,7 +394,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot ROS|Topics",
+          "category": "ROS|Topics",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Optional overrides keyed by logical topic name: pose, odom, imu, scan, lidar, rgb_camera, rgb_camera.camera_info, depth_camera, depth_camera.camera_info; for several sensors of one type the sanitized SensorId and <SensorId>.camera_info.",
@@ -413,7 +413,7 @@
             "const": false
           },
           "default": "True",
-          "category": "uBot ROS|Lifecycle",
+          "category": "ROS|Lifecycle",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "",
@@ -432,7 +432,7 @@
             "const": false
           },
           "default": "False",
-          "category": "uBot ROS|Identity",
+          "category": "ROS|Identity",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Publish frames as \"<namespace>/<frame>\" (multi-robot TF trees).",
@@ -451,7 +451,7 @@
             "const": false
           },
           "default": "True",
-          "category": "uBot ROS|TF",
+          "category": "ROS|TF",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "",
@@ -470,7 +470,7 @@
             "const": false
           },
           "default": "False",
-          "category": "uBot ROS|Publishing",
+          "category": "ROS|Publishing",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "",
@@ -489,7 +489,7 @@
             "const": false
           },
           "default": "True",
-          "category": "uBot ROS|TF",
+          "category": "ROS|TF",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "",
@@ -508,7 +508,7 @@
             "const": false
           },
           "default": "True",
-          "category": "uBot ROS|Publishing",
+          "category": "ROS|Publishing",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Skip encoding (and camera readback) while the bridge reports no subscriber for a topic.",
@@ -747,7 +747,7 @@
             "const": false
           },
           "default": "0.500000",
-          "category": "uBot|ROS|Velocity Command|Safety",
+          "category": "ROS|Velocity Command|Safety",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Sim seconds without a command before the target is stopped. 0 disables the timeout.",
@@ -769,7 +769,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot|ROS|Velocity Command|Topic",
+          "category": "ROS|Velocity Command|Topic",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Non-empty -> used instead of /<namespace>/cmd_vel. A missing leading '/' is added.",
@@ -788,7 +788,7 @@
             "const": false
           },
           "default": "0.000000",
-          "category": "uBot|ROS|Velocity Command|Limits",
+          "category": "ROS|Velocity Command|Limits",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Upper bound of the angular speed (vector norm, axis preserved). 0 = unlimited.",
@@ -809,7 +809,7 @@
             "const": false
           },
           "default": "0.000000",
-          "category": "uBot|ROS|Velocity Command|Limits",
+          "category": "ROS|Velocity Command|Limits",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Upper bound of the linear speed (vector norm, direction preserved). 0 = unlimited.",
@@ -830,7 +830,7 @@
             "const": false
           },
           "default": "",
-          "category": "uBot|ROS|Velocity Command|Identity",
+          "category": "ROS|Velocity Command|Identity",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Empty -> the namespace resolved by UBot::Identity (identity component, else the sanitized actor name).\nLeading/trailing '/' are ignored and every segment is sanitized; a value made only of '/' selects the\nroot namespace (topic /cmd_vel).",
@@ -849,7 +849,7 @@
             "const": false
           },
           "default": "()",
-          "category": "uBot|ROS|Velocity Command|Target",
+          "category": "ROS|Velocity Command|Target",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Component that receives the commands; it must implement IUBotVelocityCommandable. Unset -> the owner actor\nor its first implementing component. With only \"Referenced Actor\" set, that actor is searched the same way.",
@@ -868,7 +868,7 @@
             "const": false
           },
           "default": "True",
-          "category": "uBot|ROS|Velocity Command",
+          "category": "ROS|Velocity Command",
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Subscribe in BeginPlay. When false, call RestartCommandReceiver to start receiving.",
