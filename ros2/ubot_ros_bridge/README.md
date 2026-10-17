@@ -193,7 +193,7 @@ python3 -m pytest test/test_bridge_inprocess.py  # 桥在测试进程内运行�
 python3 -m pytest                                # 全部（也可用 python3 -m unittest discover -s test）
 ```
 
-共 77 项：`test_protocol.py` 45、`test_bridge_loopback.py` 27、`test_bridge_inprocess.py` 5。回环和进程内测试需要 ROS 2 环境；没有 ROS 时它们会被跳过，只有协议单元测试会运行。
+测试文件为 `test_protocol.py`、`test_bridge_loopback.py` 和 `test_bridge_inprocess.py`。回环和进程内测试需要 ROS 2 环境；没有 ROS 时它们会被跳过，只有协议单元测试会运行。
 
 回环测试以 `python3 -m ubot_ros_bridge.bridge_node` 启动桥（每个测试类使用独立的随机
 `ROS_DOMAIN_ID`），用 Python 客户端说协议，覆盖：HELLO/HELLO_ACK、PING/PONG、未知 op；
