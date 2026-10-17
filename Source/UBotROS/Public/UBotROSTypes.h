@@ -49,14 +49,14 @@ struct UBOTROS_API FUBotROSQos
 {
     GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS")
     EUBotROSReliability Reliability = EUBotROSReliability::BestEffort;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS")
     EUBotROSDurability Durability = EUBotROSDurability::Volatile;
 
     /** KEEP_LAST history depth. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS", meta = (ClampMin = "1", ClampMax = "1000", UIMin = "1", UIMax = "1000"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS", meta = (ClampMin = "1", ClampMax = "1000", UIMin = "1", UIMax = "1000"))
     int32 Depth = 5;
 
     FUBotROSQos() = default;
@@ -109,11 +109,11 @@ struct UBOTROS_API FUBotROSTopicOverride
 {
     GENERATED_BODY()
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS")
     bool bOverride = false;
 
     /** Topic used instead of the default when bOverride is set; the owning component resolves it. */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS", meta = (EditCondition = "bOverride"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS", meta = (EditCondition = "bOverride"))
     FString Topic;
 };
 
@@ -133,10 +133,10 @@ struct UBOTROS_API FUBotROSQosOverride
     /** Value of Reliability_DEPRECATED while no legacy data was loaded (not a valid EUBotROSReliability). */
     static constexpr uint8 LegacyReliabilityAbsent = 255;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS")
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS")
     bool bOverride = false;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "uBot|ROS", meta = (EditCondition = "bOverride"))
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS", meta = (EditCondition = "bOverride"))
     FUBotROSQos Qos;
 
     /** Load-only (legacy FAgentROSQOSOverride::Reliability); never saved. LegacyReliabilityAbsent = not loaded. */

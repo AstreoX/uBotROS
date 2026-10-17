@@ -61,49 +61,49 @@ public:
      * Blank -> namespace of the owner's uBot identity (UBot::Identity::ResolveNamespace); "/" alone -> root
      * namespace (topics like "/imu/data"). '/' separates nested namespaces; every segment is sanitized.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Identity")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Identity")
     FString RobotNamespaceOverride;
 
     /** Empty -> base frame of the owner's uBot identity (default "base_link"). */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Identity")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Identity")
     FString BaseFrameOverride;
 
     /** Empty or unresolved -> base component of the owner's uBot identity (default: root component). */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Identity", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Identity", meta = (UseComponentPicker, AllowedClasses = "/Script/Engine.SceneComponent"))
     FComponentReference BaseLinkComponent;
 
     /** Publish frames as "<namespace>/<frame>" (multi-robot TF trees). */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Identity")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Identity")
     bool bPrefixFramesWithNamespace = false;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Lifecycle")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Lifecycle")
     bool bAutoInitialize = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Publishing")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Publishing")
     bool bPublishInvalidSamples = false;
 
     /** Skip encoding (and camera readback) while the bridge reports no subscriber for a topic. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Publishing")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Publishing")
     bool bSkipWhenNoSubscribers = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|TF")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|TF")
     bool bPublishDynamicTF = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|TF")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|TF")
     bool bPublishStaticSensorTF = true;
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|TF")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|TF")
     FString OdometryFrame = TEXT("odom");
 
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|Topics", meta = (ToolTip = "Optional overrides keyed by logical topic name: pose, odom, imu, scan, lidar, rgb_camera, rgb_camera.camera_info, depth_camera, depth_camera.camera_info; for several sensors of one type the sanitized SensorId and <SensorId>.camera_info."))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Topics", meta = (ToolTip = "Optional overrides keyed by logical topic name: pose, odom, imu, scan, lidar, rgb_camera, rgb_camera.camera_info, depth_camera, depth_camera.camera_info; for several sensors of one type the sanitized SensorId and <SensorId>.camera_info."))
     TMap<FString, FUBotROSTopicOverride> TopicOverrides;
 
     /** Overrides the sensor data QoS (default best_effort / volatile / 5). */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|QoS")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|QoS")
     FUBotROSQosOverride SensorDataQosOverride;
 
     /** Overrides the state QoS of pose and odometry (default reliable / volatile / 10). */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot ROS|QoS")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|QoS")
     FUBotROSQosOverride StateQosOverride;
 
     UPROPERTY(BlueprintAssignable, Category = "uBot ROS")

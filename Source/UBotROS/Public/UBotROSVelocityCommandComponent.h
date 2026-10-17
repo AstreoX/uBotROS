@@ -37,7 +37,7 @@ public:
     UUBotROSVelocityCommandComponent();
 
     /** Subscribe in BeginPlay. When false, call RestartCommandReceiver to start receiving. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command")
     bool bAutoStartReceiver = true;
 
     /**
@@ -45,30 +45,30 @@ public:
      * Leading/trailing '/' are ignored and every segment is sanitized; a value made only of '/' selects the
      * root namespace (topic /cmd_vel).
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command|Identity")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command|Identity")
     FString RobotNamespaceOverride;
 
     /** Non-empty -> used instead of /<namespace>/cmd_vel. A missing leading '/' is added. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command|Topic")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command|Topic")
     FString CommandTopicOverride;
 
     /**
      * Component that receives the commands; it must implement IUBotVelocityCommandable. Unset -> the owner actor
      * or its first implementing component. With only "Referenced Actor" set, that actor is searched the same way.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command|Target", meta = (UseComponentPicker))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command|Target", meta = (UseComponentPicker))
     FComponentReference TargetComponent;
 
     /** Sim seconds without a command before the target is stopped. 0 disables the timeout. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command|Safety", meta = (ClampMin = "0.0", Units = "s"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command|Safety", meta = (ClampMin = "0.0", Units = "s"))
     float CommandTimeoutSeconds = 0.5f;
 
     /** Upper bound of the linear speed (vector norm, direction preserved). 0 = unlimited. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command|Limits", meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command|Limits", meta = (ClampMin = "0.0"))
     float MaxLinearSpeedMetersPerSecond = 0.0f;
 
     /** Upper bound of the angular speed (vector norm, axis preserved). 0 = unlimited. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Velocity Command|Limits", meta = (ClampMin = "0.0"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Velocity Command|Limits", meta = (ClampMin = "0.0"))
     float MaxAngularSpeedRadiansPerSecond = 0.0f;
 
     /** Fires for every valid command after conversion and clamping, whether or not a target exists. */

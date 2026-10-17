@@ -35,7 +35,7 @@ public:
     UUBotROSCommandReceiverComponent();
 
     /** Subscribe in BeginPlay. When false, call Restart Command Receiver to start receiving. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Command")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Command")
     bool bAutoStartReceiver = true;
 
     /**
@@ -43,22 +43,22 @@ public:
      * Leading/trailing '/' are ignored and every segment is sanitized; a value made only of '/' selects the
      * root namespace.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Command|Identity")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Command|Identity")
     FString RobotNamespaceOverride;
 
     /** Non-empty -> used instead of /<namespace>/<leaf>. A missing leading '/' is added. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Command|Topic")
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Command|Topic")
     FString CommandTopicOverride;
 
     /**
      * Component that receives the commands; it must implement the subclass' interface. Unset -> the owner actor
      * or its first implementing component. With only "Referenced Actor" set, that actor is searched the same way.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Command|Target", meta = (UseComponentPicker))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Command|Target", meta = (UseComponentPicker))
     FComponentReference TargetComponent;
 
     /** Sim seconds without a command before the target is released. 0 disables the timeout. */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "uBot|ROS|Command|Safety", meta = (ClampMin = "0.0", Units = "s"))
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Command|Safety", meta = (ClampMin = "0.0", Units = "s"))
     float CommandTimeoutSeconds = 0.5f;
 
     /** Fires once per timeout, after the target (if any) was released. */

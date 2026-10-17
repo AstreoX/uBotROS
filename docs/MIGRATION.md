@@ -51,5 +51,5 @@
 - **`FAgentROSQOSOverride` {`bOverride`, `Reliability`, `QueueSize`}** 变成 `FUBotROSQosOverride` {`bOverride`, `Qos`}：旧的 `Reliability` 和 `QueueSize` 加载进只读不存的成员，再由 `PostSerialize` 移入 `Qos.Reliability` / `Qos.Depth`；覆盖开启时记一条 Warning（`Migrated a legacy QoS override`），重新保存后用新格式存储。
 - **`RobotNamespace` 的默认值不同**：旧默认是 `robot`，新属性 `RobotNamespaceOverride` 默认为空，意思是改用 uBot 身份的命名空间。保持旧默认值的组件迁移后话题命名空间会改变，需要时显式填写 `RobotNamespaceOverride`。`BaseLinkFrame`（旧默认 `base_link`）同理，空值回落到身份的基坐标系，默认仍是 `base_link`。
 - `NodeNameOverride` 没有后继（不再有每组件的 ROS 节点），旧值被忽略。
-- 显示名与类别变了：`Agent ROS Sensor Suite Publisher` 变为 `uBot ROS Sensor Bridge`，类别 `Agent ROS Bridge|…` 变为 `uBot ROS|…`；Blueprint 函数名和事件名不变，引脚继续有效。
+- 显示名与类别变了：`Agent ROS Sensor Suite Publisher` 变为 `uBot ROS Sensor Bridge`，Details 面板里的分类 `Agent ROS Bridge|…` 变为 `ROS|…`；Blueprint 函数名和事件名不变，引脚继续有效。
 - 改动重定向时只编辑这个 ini；测试 `UBotROS.Redirects.Resolve` 和 `UBotROS.Redirects.QosOverrideValues` 会逐条检查。
