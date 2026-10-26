@@ -35,6 +35,8 @@ wsl.exe -d Ubuntu-22.04 -e bash -lc 'source /opt/ros/humble/setup.bash; cd <plug
 
 ### 端到端
 
+`UBotROS.Subsystem.LocalQueue.*` 不依赖外部 ROS，使用真实 TCP 字节解析验证 FIFO、两种 DDS reliability 下的保留、发布者轮转、过期与溢出分类、全局容量、注销和断线清理。`ImuPresetAndOverrides` 还验证内置 PhysicsTimeline IMU 的 FIFO / DDS depth 128 默认值，以及显式 DDS 和本地队列配置的优先级。
+
 UE 测试 `UBotROS.EndToEnd.Bridge` 与 `ros2/ubot_ros_bridge/test/e2e_check.py` 配合，夹具值定义在 `/ubot_e2e` 命名空间下（IMU、点云、`/tf_static`、`/clock`、`cmd_vel`），细节见桥的 README。步骤：
 
 ```bash

@@ -36,6 +36,8 @@ UBotROS 插件 ──TCP 8268──▶ ubot_ros_bridge (rclpy) ──▶ ROS 2 �
 
 数据流：传感器采样事件触发发布器（游戏线程）→ 编码成 CDR → `UUBotROSBridgeSubsystem::Publish` 入队 → 后台 I/O 线程写 `PUBLISH` 帧 → 桥发布。反方向，桥把订阅到的消息作为 `MESSAGE` 帧发来，I/O 线程接收后在**游戏线程的子系统 Tick 里**分发给订阅回调。游戏线程永远不会阻塞在 socket 上。
 
+UE 本地保留策略与 DDS QoS 独立配置。旧接口保留现行行为；高频时间线 IMU 默认使用有界 FIFO，队列的生命周期、容量和诊断见[本地发布队列](LOCAL-QUEUES.md)。本次源码能力需要与 Core、Sensor 和物理提供者统一重新编译。
+
 ## 在 uBot 系列中的位置
 
 UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.3` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。

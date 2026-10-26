@@ -13,6 +13,7 @@
 #include "UBotPoseSensorComponent.h"
 #include "UBotRgbCameraSensorComponent.h"
 #include "UBotROS.h"
+#include "UBotROSBridgeSubsystem.h"
 #include "UBotROSConverters.h"
 #include "UBotROSMessageTypes.h"
 #include "UBotROSSensorPublisher.h"
@@ -228,7 +229,11 @@ bool UUBotROSImuPublisher::Initialize(UObject* Sensor, const FUBotROSPublisherCo
     }
 
     const UBotROSBuiltinPublishersPrivate::FTopicLayout Layout = UBotROSBuiltinPublishersPrivate::MakeLayout(IsSoleSensorOfType(), GetSensorToken(), TEXT("imu"), TEXT("imu/data"));
-    TopicId = AdvertiseTopic(Layout.LogicalKey, Layout.DefaultPath, FUBotRosImu::TypeName(), GetContext().SensorQos, OutError);
+    const bool bTimeline = ImuSensor->SamplingMode == EUBotImuSamplingMode::PhysicsTimeline;
+    FUBotROSQos Qos = GetContext().SensorQos;
+    if (bTimeline && !GetContext().bSensorQosOverridden) { Qos.Depth = 128; }
+    TopicId = AdvertiseTopic(Layout.LogicalKey, Layout.DefaultPath, FUBotRosImu::TypeName(), Qos, OutError,
+        bTimeline ? FUBotROSLocalQueueOptions::ImuTimeline() : FUBotROSLocalQueueOptions());
     if (TopicId <= 0)
     {
         Shutdown();
@@ -236,6 +241,7 @@ bool UUBotROSImuPublisher::Initialize(UObject* Sensor, const FUBotROSPublisherCo
     }
 
     ImuSensor->OnImuDataUpdated.AddUniqueDynamic(this, &UUBotROSImuPublisher::HandleImuData);
+    ImuSensor->OnIMUTimelineReset.AddUniqueDynamic(this, &UUBotROSImuPublisher::HandleTimelineReset);
     return true;
 }
 
@@ -244,6 +250,7 @@ void UUBotROSImuPublisher::Shutdown()
     if (UUBotImuSensorComponent* ImuSensor = Cast<UUBotImuSensorComponent>(GetSensor()))
     {
         ImuSensor->OnImuDataUpdated.RemoveDynamic(this, &UUBotROSImuPublisher::HandleImuData);
+        ImuSensor->OnIMUTimelineReset.RemoveDynamic(this, &UUBotROSImuPublisher::HandleTimelineReset);
     }
     TopicId = 0;
     Super::Shutdown();
@@ -256,6 +263,11 @@ void UUBotROSImuPublisher::HandleImuData(const FUBotImuSensorData& Data)
         return;
     }
     PublishMessage(TopicId, UBot::ROSConvert::MakeImu(Data, GetSensorFrameId()));
+}
+
+void UUBotROSImuPublisher::HandleTimelineReset()
+{
+    if (UUBotROSBridgeSubsystem* Bridge = GetBridge()) { Bridge->ClearPendingMessages(TopicId); }
 }
 
 // ---------------------------------------------------------------------------------------------------

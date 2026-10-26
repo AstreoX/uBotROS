@@ -22,6 +22,7 @@
 #include "UBotROSProtocol.h"
 #include "UBotROSRuntimeStatus.h"
 #include "UBotROSSettings.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 #include <atomic>
 
@@ -108,11 +109,17 @@ struct FUBotROSOutgoingFrame
     uint32 Id = 0;
     TArray<uint8> Head;
     TArray<uint8> Body;
+    double EnqueuedSeconds = 0;
 
     int64 Num() const
     {
         return static_cast<int64>(Head.Num()) + Body.Num();
     }
+};
+
+struct FUBotROSFifoSlot
+{
+    TDeque<FUBotROSOutgoingFrame> Frames;
 };
 
 enum class EUBotROSEnqueueResult : uint8
@@ -238,9 +245,12 @@ public:
         FScopeLock Lock(&Mutex);
         bWanted = false;
         bSessionActive = false;
-        DroppedMessages += CountQueuedPublishesLocked();
+        const int64 Cleared = CountQueuedPublishesLocked();
+        DroppedMessages += Cleared;
+        LocalQueueClearedMessages += Cleared;
         OrderedQueue.Empty();
         BestEffortSlots.Empty();
+        FifoSlots.Empty();
         BestEffortOrder.Empty();
         QueuedBytes = 0;
     }
@@ -250,11 +260,12 @@ public:
         return Thread != nullptr;
     }
 
-    void AddPublisher(uint32 Id, const FString& Topic, const FString& Type, const FUBotROSQos& Qos)
+    void AddPublisher(uint32 Id, const FString& Topic, const FString& Type, const FUBotROSQos& Qos, const FUBotROSLocalQueueOptions& Queue)
     {
         using namespace UBot::ROSProtocol;
         FScopeLock Lock(&Mutex);
         PublisherRegistry.Add(Id, FRegisteredTopic{ Topic, Type, Qos });
+        PublisherRegistry.FindChecked(Id).Queue = SanitizeQueue(Queue);
         if (bSessionActive)
         {
             EnqueueControlLocked(EOp::Advertise, MakeTopicJson(Id, Topic, Type, Qos));
@@ -269,6 +280,7 @@ public:
         {
             return;
         }
+        const int64 BeforeDrops = DroppedMessages;
         RemoveBestEffortSlotLocked(Id, true);
         if (bSessionActive)
         {
@@ -280,6 +292,7 @@ public:
             // Not advertised again after a reconnect, so its queued messages could not be delivered.
             PurgeOrderedQueueLocked();
         }
+        LocalQueueClearedMessages += DroppedMessages - BeforeDrops;
     }
 
     void AddSubscription(uint32 Id, const FString& Topic, const FString& Type, const FUBotROSQos& Qos)
@@ -319,18 +332,36 @@ public:
         if (!bWanted)
         {
             ++DroppedMessages;
+            ++LocalQueueDisconnectedMessages;
             return EUBotROSEnqueueResult::Dropped;
         }
 
-        const bool bReliable = UBot::ROSBridgeSubsystem::Private::IsReliable(Publisher->Qos);
+        const bool bReliable = Publisher->Queue.Mode == EUBotROSLocalQueueMode::Legacy
+            && UBot::ROSBridgeSubsystem::Private::IsReliable(Publisher->Qos);
         if (!bReliable && !bSessionActive)
         {
             ++DroppedMessages;
+            ++LocalQueueDisconnectedMessages;
             return EUBotROSEnqueueResult::Dropped;
         }
 
         FUBotROSOutgoingFrame Frame = MakePublishFrame(Id, MoveTemp(Cdr));
         const int64 Size = Frame.Num();
+        if (!FifoSlots.IsEmpty())
+        {
+            const double Now = FPlatformTime::Seconds();
+            // Expired data from another publisher must not consume the shared budget or be
+            // misclassified as overflow when this publisher enqueues a fresh sample.
+            for (int32 Index = BestEffortOrder.Num() - 1; Index >= 0; --Index)
+            {
+                PruneExpiredFifoLocked(BestEffortOrder[Index], Now);
+            }
+        }
+
+        if (Publisher->Queue.Mode == EUBotROSLocalQueueMode::BoundedFifo)
+        {
+            return EnqueueFifoLocked(Id, MoveTemp(Frame), Publisher->Queue);
+        }
 
         if (bReliable)
         {
@@ -421,6 +452,27 @@ public:
         Out.DroppedMessages = DroppedMessages;
         Out.RejectedMessages = RejectedMessages;
         Out.QueuedBytes = QueuedBytes;
+        Out.LocalQueueExpiredMessages = LocalQueueExpiredMessages;
+        Out.LocalQueueOverflowMessages = LocalQueueOverflowMessages;
+        Out.LocalQueueClearedMessages = LocalQueueClearedMessages;
+        Out.LocalQueueDisconnectedMessages = LocalQueueDisconnectedMessages;
+        Out.MaxLocalQueueAgeMilliseconds = MaxLocalQueueAgeMilliseconds;
+    }
+
+    void ConfigureQueue(uint32 Id, const FUBotROSLocalQueueOptions& Options)
+    {
+        FScopeLock Lock(&Mutex);
+        if (FRegisteredTopic* Topic = PublisherRegistry.Find(Id))
+        {
+            ClearPendingLocked(Id);
+            Topic->Queue = SanitizeQueue(Options);
+        }
+    }
+
+    void ClearPending(uint32 Id)
+    {
+        FScopeLock Lock(&Mutex);
+        ClearPendingLocked(Id);
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -482,11 +534,83 @@ private:
         FString Topic;
         FString Type;
         FUBotROSQos Qos;
+        FUBotROSLocalQueueOptions Queue;
     };
 
     // ---------------------------------------------------------------------------------------------
     // Queues (Mutex held)
     // ---------------------------------------------------------------------------------------------
+
+    static FUBotROSLocalQueueOptions SanitizeQueue(FUBotROSLocalQueueOptions Options)
+    {
+        Options.MaxPendingMessages = FMath::Clamp(Options.MaxPendingMessages, 1, 65536);
+        Options.MaxAgeSeconds = FMath::IsFinite(Options.MaxAgeSeconds) ? FMath::Max(0.001, Options.MaxAgeSeconds) : 0.1;
+        return Options;
+    }
+
+    void PruneExpiredFifoLocked(uint32 Id, double Now)
+    {
+        FUBotROSFifoSlot* Slot = FifoSlots.Find(Id);
+        const FRegisteredTopic* Topic = PublisherRegistry.Find(Id);
+        if (!Slot || !Topic) { return; }
+        FUBotROSOutgoingFrame Removed;
+        while (!Slot->Frames.IsEmpty() && Now - Slot->Frames.First().EnqueuedSeconds > Topic->Queue.MaxAgeSeconds)
+        {
+            Slot->Frames.TryPopFirst(Removed);
+            QueuedBytes -= Removed.Num();
+            ++DroppedMessages; ++LocalQueueExpiredMessages;
+        }
+        if (Slot->Frames.IsEmpty()) { FifoSlots.Remove(Id); BestEffortOrder.Remove(Id); }
+    }
+
+    EUBotROSEnqueueResult EnqueueFifoLocked(uint32 Id, FUBotROSOutgoingFrame&& Frame, const FUBotROSLocalQueueOptions& Options)
+    {
+        const double Now = FPlatformTime::Seconds();
+        const int64 Size = Frame.Num();
+        PruneExpiredFifoLocked(Id, Now);
+        FUBotROSFifoSlot* Slot = FifoSlots.Find(Id);
+        if (Slot)
+        {
+            FUBotROSOutgoingFrame Removed;
+            while (!Slot->Frames.IsEmpty() && (Slot->Frames.Num() >= Options.MaxPendingMessages || QueuedBytes + Size > MaxQueuedBytes))
+            {
+                Slot->Frames.TryPopFirst(Removed);
+                QueuedBytes -= Removed.Num();
+                ++DroppedMessages; ++LocalQueueOverflowMessages;
+            }
+        }
+        if (QueuedBytes + Size > MaxQueuedBytes) { EvictBestEffortLocked(QueuedBytes + Size - MaxQueuedBytes, Id, true); }
+        if (QueuedBytes + Size > MaxQueuedBytes)
+        {
+            ++DroppedMessages; ++LocalQueueOverflowMessages;
+            return EUBotROSEnqueueResult::Dropped;
+        }
+        Slot = FifoSlots.Find(Id);
+        if (!Slot) { Slot = &FifoSlots.Add(Id); BestEffortOrder.Add(Id); }
+        Frame.EnqueuedSeconds = Now;
+        Slot->Frames.EmplaceLast(MoveTemp(Frame));
+        QueuedBytes += Size;
+        return EUBotROSEnqueueResult::Queued;
+    }
+
+    void ClearPendingLocked(uint32 Id)
+    {
+        const int64 Before = DroppedMessages;
+        RemoveBestEffortSlotLocked(Id, true);
+        TDeque<FUBotROSOutgoingFrame> Kept;
+        FUBotROSOutgoingFrame Frame;
+        while (OrderedQueue.TryPopFirst(Frame))
+        {
+            if (Frame.Op == UBot::ROSProtocol::EOp::Publish && Frame.Id == Id)
+            {
+                QueuedBytes -= Frame.Num(); ++DroppedMessages;
+            }
+            else { Kept.EmplaceLast(MoveTemp(Frame)); }
+        }
+        OrderedQueue = MoveTemp(Kept);
+        LocalQueueClearedMessages += DroppedMessages - Before;
+    }
+
 
     static FUBotROSOutgoingFrame MakeJsonFrame(UBot::ROSProtocol::EOp Op, const FString& Json)
     {
@@ -559,6 +683,13 @@ private:
 
     void RemoveBestEffortSlotLocked(uint32 Id, bool bCountAsDropped)
     {
+        if (FUBotROSFifoSlot* Slot = FifoSlots.Find(Id))
+        {
+            for (const FUBotROSOutgoingFrame& Frame : Slot->Frames) { QueuedBytes -= Frame.Num(); }
+            if (bCountAsDropped) { DroppedMessages += Slot->Frames.Num(); }
+            FifoSlots.Remove(Id);
+            BestEffortOrder.Remove(Id);
+        }
         FUBotROSOutgoingFrame Removed;
         if (BestEffortSlots.RemoveAndCopyValue(Id, Removed))
         {
@@ -584,6 +715,16 @@ private:
                 continue;
             }
             FUBotROSOutgoingFrame Removed;
+            if (FUBotROSFifoSlot* Slot = FifoSlots.Find(Id))
+            {
+                while (Freed < BytesNeeded && Slot->Frames.TryPopFirst(Removed))
+                {
+                    Freed += Removed.Num(); QueuedBytes -= Removed.Num();
+                    ++DroppedMessages; ++LocalQueueOverflowMessages;
+                }
+                if (!Slot->Frames.IsEmpty()) { ++Index; continue; }
+                FifoSlots.Remove(Id);
+            }
             if (BestEffortSlots.RemoveAndCopyValue(Id, Removed))
             {
                 Freed += Removed.Num();
@@ -621,6 +762,7 @@ private:
     int64 CountQueuedPublishesLocked() const
     {
         int64 Count = BestEffortSlots.Num();
+        for (const auto& Pair : FifoSlots) { Count += Pair.Value.Frames.Num(); }
         for (const FUBotROSOutgoingFrame& Frame : OrderedQueue)
         {
             Count += Frame.Op == UBot::ROSProtocol::EOp::Publish ? 1 : 0;
@@ -639,7 +781,22 @@ private:
         while (BestEffortOrder.Num() > 0)
         {
             const uint32 Id = BestEffortOrder[0];
+            PruneExpiredFifoLocked(Id, FPlatformTime::Seconds());
+            if (BestEffortOrder.IsEmpty() || BestEffortOrder[0] != Id) { continue; }
             BestEffortOrder.RemoveAt(0);
+            if (FUBotROSFifoSlot* Slot = FifoSlots.Find(Id))
+            {
+                if (Slot->Frames.TryPopFirst(OutFrame))
+                {
+                    QueuedBytes -= OutFrame.Num();
+                    MaxLocalQueueAgeMilliseconds = FMath::Max(MaxLocalQueueAgeMilliseconds,
+                        (FPlatformTime::Seconds() - OutFrame.EnqueuedSeconds) * 1000);
+                    if (Slot->Frames.IsEmpty()) { FifoSlots.Remove(Id); }
+                    else { BestEffortOrder.Add(Id); }
+                    return true;
+                }
+                FifoSlots.Remove(Id);
+            }
             if (BestEffortSlots.RemoveAndCopyValue(Id, OutFrame))
             {
                 QueuedBytes -= OutFrame.Num();
@@ -877,9 +1034,16 @@ private:
         {
             FScopeLock Lock(&Mutex);
             bSessionActive = false;
+            const int64 BeforeDrops = DroppedMessages;
             // Frames handed to the socket but not completely written are lost with the connection.
             DroppedMessages += StagingPublishFrames + ((bHasLargeFrame && LargeFrame.Op == UBot::ROSProtocol::EOp::Publish) ? 1 : 0);
             PurgeOrderedQueueLocked();
+            for (const auto& Pair : FifoSlots)
+            {
+                DroppedMessages += Pair.Value.Frames.Num();
+                for (const auto& Frame : Pair.Value.Frames) { QueuedBytes -= Frame.Num(); }
+            }
+            FifoSlots.Empty();
             DroppedMessages += BestEffortSlots.Num();
             for (const TPair<uint32, FUBotROSOutgoingFrame>& Slot : BestEffortSlots)
             {
@@ -887,6 +1051,7 @@ private:
             }
             BestEffortSlots.Empty();
             BestEffortOrder.Empty();
+            LocalQueueDisconnectedMessages += DroppedMessages - BeforeDrops;
         }
 
         Staging.Empty();
@@ -1004,6 +1169,7 @@ private:
 
     bool PumpSend(bool& bProgress, FString& OutError)
     {
+        TRACE_CPUPROFILER_EVENT_SCOPE(UBot_ROS_Send);
         using namespace UBot::ROSBridgeSubsystem::Private;
 
         int64 Budget = SendBudgetBytes;
@@ -1223,12 +1389,15 @@ private:
     TMap<uint32, FRegisteredTopic> SubscriptionRegistry;
     TDeque<FUBotROSOutgoingFrame> OrderedQueue;
     TMap<uint32, FUBotROSOutgoingFrame> BestEffortSlots;
+    TMap<uint32, FUBotROSFifoSlot> FifoSlots;
     TArray<uint32> BestEffortOrder;
     int64 QueuedBytes = 0;
     uint32 MaxPayloadBytes = UBot::ROSProtocol::DefaultMaxPayloadBytes;
     int64 MaxQueuedBytes = 268435456;
     int64 DroppedMessages = 0;
     int64 RejectedMessages = 0;
+    int64 LocalQueueExpiredMessages = 0, LocalQueueOverflowMessages = 0, LocalQueueClearedMessages = 0, LocalQueueDisconnectedMessages = 0;
+    double MaxLocalQueueAgeMilliseconds = 0;
     bool bSendingPaused = false;
 
     // Thread-safe without the mutex.
@@ -1348,6 +1517,11 @@ bool UUBotROSBridgeSubsystem::DoesSupportWorldType(const EWorldType::Type WorldT
 
 int32 UUBotROSBridgeSubsystem::Advertise(const FString& Topic, const FString& Type, const FUBotROSQos& Qos)
 {
+    return Advertise(Topic, Type, Qos, FUBotROSLocalQueueOptions());
+}
+
+int32 UUBotROSBridgeSubsystem::Advertise(const FString& Topic, const FString& Type, const FUBotROSQos& Qos, const FUBotROSLocalQueueOptions& Queue)
+{
     if (!UBot::ROSProtocol::IsValidTopicName(Topic))
     {
         UE_LOG(LogUBotROS, Warning, TEXT("uBot ROS bridge: cannot advertise '%s': not a fully qualified ROS 2 topic name."), *Topic);
@@ -1369,9 +1543,19 @@ int32 UUBotROSBridgeSubsystem::Advertise(const FString& Topic, const FString& Ty
     State.Type = Type;
     State.Qos = Qos;
     State.SubscriberCount = -1;
-    Client->AddPublisher(static_cast<uint32>(Id), Topic, Type, Qos);
+    Client->AddPublisher(static_cast<uint32>(Id), Topic, Type, Qos, Queue);
     UE_LOG(LogUBotROS, Verbose, TEXT("uBot ROS bridge: publisher %d -> %s (%s)."), Id, *Topic, *Type);
     return Id;
+}
+
+void UUBotROSBridgeSubsystem::ConfigurePublisherQueue(int32 PublisherId, const FUBotROSLocalQueueOptions& Queue)
+{
+    if (Client && Publishers.Contains(PublisherId)) { Client->ConfigureQueue(static_cast<uint32>(PublisherId), Queue); }
+}
+
+void UUBotROSBridgeSubsystem::ClearPendingMessages(int32 PublisherId)
+{
+    if (Client && Publishers.Contains(PublisherId)) { Client->ClearPending(static_cast<uint32>(PublisherId)); }
 }
 
 void UUBotROSBridgeSubsystem::Unadvertise(int32 PublisherId)
@@ -1401,6 +1585,7 @@ void UUBotROSBridgeSubsystem::Unadvertise(int32 PublisherId)
 
 bool UUBotROSBridgeSubsystem::Publish(int32 PublisherId, TArray<uint8>&& Cdr)
 {
+    TRACE_CPUPROFILER_EVENT_SCOPE(UBot_ROS_Enqueue);
     const FPublisherState* State = Publishers.Find(PublisherId);
     if (State == nullptr || !Client.IsValid())
     {

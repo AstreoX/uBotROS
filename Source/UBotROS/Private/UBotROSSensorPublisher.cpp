@@ -93,7 +93,8 @@ FString UUBotROSSensorPublisher::GetOpticalFrameId() const
     return SensorFrameId + UBot::ROSConventions::OpticalFrameSuffix();
 }
 
-int32 UUBotROSSensorPublisher::AdvertiseTopic(const FString& LogicalKey, const FString& DefaultRelativePath, const FString& MessageType, const FUBotROSQos& Qos, FString& OutError)
+int32 UUBotROSSensorPublisher::AdvertiseTopic(const FString& LogicalKey, const FString& DefaultRelativePath, const FString& MessageType, const FUBotROSQos& Qos, FString& OutError,
+    const FUBotROSLocalQueueOptions& Queue)
 {
     UUBotROSBridgeSubsystem* Bridge = BridgePtr.Get();
     if (!Bridge)
@@ -109,7 +110,7 @@ int32 UUBotROSSensorPublisher::AdvertiseTopic(const FString& LogicalKey, const F
         return 0;
     }
 
-    const int32 PublisherId = Bridge->Advertise(Topic, MessageType, Qos);
+    const int32 PublisherId = Bridge->Advertise(Topic, MessageType, Qos, PublisherContext.LocalQueueOverride.bEnabled ? PublisherContext.LocalQueueOverride.Options : Queue);
     if (PublisherId <= 0)
     {
         OutError = FString::Printf(TEXT("Sensor '%s': the uBot ROS bridge rejected topic '%s' (%s)."), *RawSensorId, *Topic, *MessageType);

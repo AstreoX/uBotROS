@@ -244,6 +244,8 @@ bool UUBotROSSensorBridgeComponent::ConfigurePublishers(FString& OutError)
         Context.Bridge = Subsystem;
         Context.Namespace = ResolvedNamespace;
         Context.SensorQos = SensorQos;
+        Context.bSensorQosOverridden = SensorDataQosOverride.bOverride;
+        Context.LocalQueueOverride = LocalQueueOverride;
         Context.StateQos = StateQos;
         Context.bPublishInvalidSamples = bPublishInvalidSamples;
         Context.bSkipWhenNoSubscribers = bSkipWhenNoSubscribers;

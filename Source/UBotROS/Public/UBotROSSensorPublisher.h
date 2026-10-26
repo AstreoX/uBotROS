@@ -7,6 +7,7 @@
 #include "UBotExtensionRegistry.h"
 #include "UBotROSMessageTypes.h"
 #include "UBotROSTypes.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 #include "UBotROSSensorPublisher.generated.h"
 
 class IUBotROSSensorPublisherFactory;
@@ -27,6 +28,8 @@ struct UBOTROS_API FUBotROSPublisherContext
 
     /** QoS of high-rate sensor data (IMU, scans, clouds, images). Default best_effort / volatile / 5. */
     FUBotROSQos SensorQos = FUBotROSQos::SensorData();
+    bool bSensorQosOverridden = false;
+    FUBotROSLocalQueueOverride LocalQueueOverride;
 
     /** QoS of state messages (pose, odometry). Default reliable / volatile / 10. */
     FUBotROSQos StateQos = FUBotROSQos::State();
@@ -108,7 +111,8 @@ protected:
      * Resolves LogicalKey / DefaultRelativePath through the context, advertises the topic and records
      * it for GetTopics and Shutdown. Returns the publisher id (> 0) or 0 with OutError.
      */
-    int32 AdvertiseTopic(const FString& LogicalKey, const FString& DefaultRelativePath, const FString& MessageType, const FUBotROSQos& Qos, FString& OutError);
+    int32 AdvertiseTopic(const FString& LogicalKey, const FString& DefaultRelativePath, const FString& MessageType, const FUBotROSQos& Qos, FString& OutError,
+        const FUBotROSLocalQueueOptions& Queue = FUBotROSLocalQueueOptions());
 
     /** Context.ResolveTopic, or "/<Namespace>/<sanitized DefaultRelativePath>" without one. */
     FString ResolveTopic(const FString& LogicalKey, const FString& DefaultRelativePath) const;
@@ -132,6 +136,7 @@ protected:
     template <typename TMessage>
     bool PublishMessage(int32 PublisherId, const TMessage& Message)
     {
+        TRACE_CPUPROFILER_EVENT_SCOPE(UBot_ROS_Encode);
         return PublishCdr(PublisherId, UBot::Ros::Encode(Message));
     }
 

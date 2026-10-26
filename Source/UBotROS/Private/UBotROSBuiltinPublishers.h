@@ -73,6 +73,8 @@ public:
 private:
     UFUNCTION()
     void HandleImuData(const FUBotImuSensorData& Data);
+    UFUNCTION()
+    void HandleTimelineReset();
 
     int32 TopicId = 0;
 };

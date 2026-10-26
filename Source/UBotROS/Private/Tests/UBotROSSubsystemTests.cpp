@@ -19,6 +19,9 @@
 #include "UBotROSSettings.h"
 #include "UBotROSTypes.h"
 #include "UBotRuntimeStatus.h"
+#include "UBotImuSensorComponent.h"
+#include "UBotROSBuiltinPublishers.h"
+#include "UObject/StrongObjectPtr.h"
 
 namespace UBotROSSubsystemTests
 {
@@ -1571,6 +1574,173 @@ bool FUBotROSSubsystemSharedStatusTest::RunTest(const FString& Parameters)
     TestEqual(TEXT("No world publishes any more"), UBot::ROSRuntimeStatus::GetPublishingOwnerCount(), 0);
     TestNull(TEXT("The item goes away with the last world"), RuntimeStatus.FindItem(StatusId));
     TestNull(TEXT("No problem outlives the last world"), RuntimeStatus.FindProblem(StatusId));
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSImuQueuePresetTest, "UBotROS.Subsystem.LocalQueue.ImuPresetAndOverrides", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FUBotROSImuQueuePresetTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSSubsystemTests;
+    FTestBridgeServer Server;
+    if (!TestTrue(TEXT("Server listens"), Server.Start())) { return false; }
+    FScopedBridgeWorld Scope;
+    auto* Bridge = Scope.Bridge();
+    auto* Carrier = Scope.Get()->SpawnActor<AActor>();
+    auto* Imu = NewObject<UUBotImuSensorComponent>(Carrier);
+    Imu->bAutoStart = false;
+    Imu->SamplingMode = EUBotImuSamplingMode::PhysicsTimeline;
+    Carrier->SetRootComponent(Imu);
+    Imu->RegisterComponent();
+    TStrongObjectPtr<UUBotROSImuPublisher> Publisher(NewObject<UUBotROSImuPublisher>());
+    FUBotROSPublisherContext Context;
+    Context.Bridge = Bridge;
+    Context.Namespace = TEXT("preset");
+    Context.bSkipWhenNoSubscribers = false;
+    if (!ConnectBridge(*this, Server, Bridge)) { return false; }
+    for (const bool bOverride : {false, true})
+    {
+        Server.Frames.Reset();
+        Context.bSensorQosOverridden = bOverride;
+        Context.SensorQos.Depth = 7;
+        Context.LocalQueueOverride.bEnabled = bOverride;
+        Context.LocalQueueOverride.Options.Mode = EUBotROSLocalQueueMode::LatestOnly;
+        FString Error;
+        if (!TestTrue(TEXT("Builtin IMU initializes"), Publisher->Initialize(Imu, Context, Error))) { AddError(Error); return false; }
+        FTopicRequest Request;
+        if (!TestTrue(TEXT("IMU advertised"), PumpUntil(Server, Bridge, [&] {
+            return Server.FindTopicRequest(EOp::Advertise, TEXT("/preset/imu/data"), Request)
+                && Request.Qos.Depth == (bOverride ? 7 : 128);
+        }))) { return false; }
+        TestEqual(TEXT("DDS preset respects explicit override"), Request.Qos.Depth, bOverride ? 7 : 128);
+        PumpFor(Server, Bridge, 0.02);
+        Bridge->SetSendingPaused(true);
+        FUBotImuSensorData Data;
+        Data.Header.bValid = true;
+        Data.Header.Status = EUBotSampleStatus::Valid;
+        for (int32 Index = 0; Index < 10; ++Index)
+        {
+            Data.Header.TimestampSeconds = Index * 0.005;
+            Imu->OnImuDataUpdated.Broadcast(Data);
+        }
+        Bridge->SetSendingPaused(false);
+        const int32 Expected = bOverride ? 1 : 10;
+        TestTrue(TEXT("FIFO preset / explicit latest policy retain expected batch"), PumpUntil(Server, Bridge, [&] {
+            return Server.PublishedBodies(Request.Id).Num() == Expected;
+        }));
+        PumpFor(Server, Bridge, 0.02);
+        TestEqual(TEXT("No extra batch messages"), Server.PublishedBodies(Request.Id).Num(), Expected);
+        Bridge->SetSendingPaused(true);
+        Imu->OnImuDataUpdated.Broadcast(Data);
+        Imu->OnIMUTimelineReset.Broadcast();
+        Bridge->SetSendingPaused(false);
+        PumpFor(Server, Bridge, 0.02);
+        TestEqual(TEXT("Timeline reset clears pending measurements"), Server.PublishedBodies(Request.Id).Num(), Expected);
+        Publisher->Shutdown();
+    }
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSLocalFifoTest, "UBotROS.Subsystem.LocalQueue.FifoRetentionAndLifecycle", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FUBotROSLocalFifoTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSSubsystemTests;
+    FTestBridgeServer Server;
+    if (!TestTrue(TEXT("Server listens"), Server.Start())) { return false; }
+    FScopedBridgeWorld Scope;
+    UUBotROSBridgeSubsystem* Bridge = Scope.Bridge();
+    FUBotROSLocalQueueOptions Options = FUBotROSLocalQueueOptions::ImuTimeline();
+    Options.MaxPendingMessages = 3; Options.MaxAgeSeconds = 10;
+    const int32 A = Bridge->Advertise(TEXT("/fifo/a"), TEXT("sensor_msgs/msg/Imu"), FUBotROSQos::SensorData(), Options);
+    const int32 B = Bridge->Advertise(TEXT("/fifo/b"), TEXT("sensor_msgs/msg/Imu"), FUBotROSQos::State(), Options);
+    if (!ConnectBridge(*this, Server, Bridge)) { return false; }
+    PumpFor(Server, Bridge, 0.02);
+    Bridge->SetSendingPaused(true);
+    for (int32 Index = 0; Index < 3; ++Index)
+    {
+        Bridge->Publish(A, FakeCdr(24, Index));
+        Bridge->Publish(B, FakeCdr(24, Index + 10));
+    }
+    Bridge->SetSendingPaused(false);
+    TestTrue(TEXT("Both DDS reliability policies retain all three local samples"), PumpUntil(Server, Bridge,
+        [&] { return Server.PublishedBodies(A).Num() == 3 && Server.PublishedBodies(B).Num() == 3; }));
+    const auto AData = Server.PublishedBodies(A);
+    for (int32 Index = 0; Index < AData.Num(); ++Index) { TestTrue(TEXT("FIFO data order"), AData[Index] == FakeCdr(24, Index)); }
+    TArray<uint32> Order;
+    for (const FWireFrame& Frame : Server.Frames)
+    {
+        if (Frame.Op == uint8(EOp::Publish))
+        {
+            const uint32 Id = ReadU32LE(Frame.Payload.GetData());
+            if (Id == uint32(A) || Id == uint32(B)) { Order.Add(Id); }
+        }
+    }
+    for (int32 Index = 1; Index < Order.Num(); ++Index) { TestTrue(TEXT("Active FIFO topics rotate fairly"), Order[Index] != Order[Index - 1]); }
+    TestEqual(TEXT("Healthy batch has no drops"), Bridge->GetStats().DroppedMessages, int64(0));
+    Bridge->SetSendingPaused(true);
+    for (int32 Index = 0; Index < 5; ++Index) { Bridge->Publish(A, FakeCdr(24, 20 + Index)); }
+    TestEqual(TEXT("Overflow classified"), Bridge->GetStats().LocalQueueOverflowMessages, int64(2));
+    Bridge->SetSendingPaused(false);
+    TestTrue(TEXT("Newest three retained"), PumpUntil(Server, Bridge, [&] { return Server.PublishedBodies(A).Num() == 6; }));
+    const auto Retained = Server.PublishedBodies(A);
+    for (int32 Index = 0; Index < 3 && Retained.Num() >= 6; ++Index)
+    { TestTrue(TEXT("Overflow evicts oldest"), Retained[Index + 3] == FakeCdr(24, 22 + Index)); }
+    Options.MaxAgeSeconds = 0.02;
+    Bridge->ConfigurePublisherQueue(A, Options);
+    Bridge->SetSendingPaused(true);
+    Bridge->Publish(A, FakeCdr(24, 50));
+    FPlatformProcess::Sleep(0.04f);
+    Bridge->SetSendingPaused(false);
+    PumpFor(Server, Bridge, 0.05);
+    TestEqual(TEXT("Expired sample never transmitted"), Server.PublishedBodies(A).Num(), 6);
+    TestEqual(TEXT("Expiry classified"), Bridge->GetStats().LocalQueueExpiredMessages, int64(1));
+    Options.MaxAgeSeconds = 10;
+    Bridge->ConfigurePublisherQueue(A, Options);
+    Bridge->SetSendingPaused(true);
+    Bridge->Publish(A, FakeCdr(24, 60));
+    Bridge->ClearPendingMessages(A);
+    TestEqual(TEXT("Timeline clear classified"), Bridge->GetStats().LocalQueueClearedMessages, int64(1));
+    Bridge->Publish(B, FakeCdr(24, 70));
+    Bridge->Disconnect();
+    Bridge->SetSendingPaused(false);
+    if (!ConnectBridge(*this, Server, Bridge)) { return false; }
+    PumpFor(Server, Bridge, 0.05);
+    TestEqual(TEXT("No old reliable FIFO sample replayed"), Server.PublishedBodies(B).Num(), 0);
+    TestFalse(TEXT("Protocol remains valid"), Server.bProtocolError);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSLocalFifoByteLimitTest, "UBotROS.Subsystem.LocalQueue.GlobalByteLimit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FUBotROSLocalFifoByteLimitTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSSubsystemTests;
+    FTestBridgeServer Server;
+    if (!Server.Start()) { return false; }
+    FScopedBridgeWorld Scope(false, 1024, 1024);
+    UUBotROSBridgeSubsystem* Bridge = Scope.Bridge();
+    auto Options = FUBotROSLocalQueueOptions::ImuTimeline(); Options.MaxAgeSeconds = 10;
+    const int32 Id = Bridge->Advertise(TEXT("/fifo/bytes"), TEXT("sensor_msgs/msg/Imu"), FUBotROSQos::SensorData(), Options);
+    if (!ConnectBridge(*this, Server, Bridge)) { return false; }
+    PumpFor(Server, Bridge, 0.02);
+    Bridge->SetSendingPaused(true);
+    for (int32 Index = 0; Index < 5; ++Index) { Bridge->Publish(Id, FakeCdr(800, Index)); }
+    TestTrue(TEXT("Global byte limit respected"), Bridge->GetStats().QueuedBytes <= 1024 + UBot::ROSProtocol::HeaderSize);
+    TestEqual(TEXT("Oldest four evicted"), Bridge->GetStats().LocalQueueOverflowMessages, int64(4));
+    Bridge->Unadvertise(Id);
+    Bridge->SetSendingPaused(false);
+    PumpFor(Server, Bridge, 0.03);
+    TestEqual(TEXT("Unadvertise clears FIFO"), Server.PublishedBodies(Id).Num(), 0);
+    Options.MaxAgeSeconds = 0.02;
+    const int32 Expiring = Bridge->Advertise(TEXT("/fifo/expiring"), TEXT("sensor_msgs/msg/Imu"), FUBotROSQos::SensorData(), Options);
+    const int32 Fresh = Bridge->Advertise(TEXT("/fifo/fresh"), TEXT("sensor_msgs/msg/Imu"), FUBotROSQos::SensorData());
+    PumpFor(Server, Bridge, 0.02);
+    Bridge->SetSendingPaused(true);
+    Bridge->Publish(Expiring, FakeCdr(800, 1));
+    FPlatformProcess::Sleep(0.04f);
+    Bridge->Publish(Fresh, FakeCdr(800, 2));
+    TestEqual(TEXT("Other publisher's expired data classified before capacity eviction"), Bridge->GetStats().LocalQueueExpiredMessages, int64(1));
+    TestEqual(TEXT("Expiration does not inflate overflow"), Bridge->GetStats().LocalQueueOverflowMessages, int64(4));
+    Bridge->SetSendingPaused(false);
+    TestTrue(TEXT("Fresh data survives shared budget"), PumpUntil(Server, Bridge, [&] { return Server.PublishedBodies(Fresh).Num() == 1; }));
     return true;
 }
 

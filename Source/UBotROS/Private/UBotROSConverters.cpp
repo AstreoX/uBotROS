@@ -1,4 +1,5 @@
 #include "UBotROSConverters.h"
+#include "ProfilingDebugging/CpuProfilerTrace.h"
 
 #include "UBot2DLidarFrame.h"
 #include "UBotImageFrame.h"
@@ -96,6 +97,7 @@ namespace UBot::ROSConvert
 
     FUBotRosImu MakeImu(const FUBotImuSensorData& Data, const FString& FrameId)
     {
+        TRACE_CPUPROFILER_EVENT_SCOPE(UBot_ROS_ConvertIMU);
         FUBotRosImu Result;
         Result.header = MakeHeader(Data.Header, FrameId);
         Result.orientation = FUBotRosQuaternion::FromQuat(UBot::RightHanded::RotationFromUE(Data.OrientationQuaternion));
@@ -147,6 +149,7 @@ namespace UBot::ROSConvert
 
     FUBotRosPointCloud2 MakePointCloud2(const UUBotPointCloudFrame& Frame, const FString& FrameId)
     {
+        TRACE_CPUPROFILER_EVENT_SCOPE(UBot_ROS_ConvertCloud);
         const TArray<FVector>& Points = Frame.GetPointsMeters();
         const TArray<int32>& Rings = Frame.GetRingIndices();
         const TArray<float>& TimeOffsets = Frame.GetTimeOffsetsSeconds();

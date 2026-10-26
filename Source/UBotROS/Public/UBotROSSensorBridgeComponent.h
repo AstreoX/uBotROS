@@ -102,6 +102,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|QoS")
     FUBotROSQosOverride SensorDataQosOverride;
 
+    /** Optional local pending queue policy, independent of Sensor Data QoS. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|Queue")
+    FUBotROSLocalQueueOverride LocalQueueOverride;
+
     /** Overrides the state QoS of pose and odometry (default reliable / volatile / 10). */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ROS|QoS")
     FUBotROSQosOverride StateQosOverride;

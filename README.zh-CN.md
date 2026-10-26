@@ -92,6 +92,7 @@ git clone -b v0.1.2 https://github.com/AstreoX/uBotROS.git <Project>/Plugins/uBo
 | 发布自定义传感器 | [为自定义传感器添加 ROS 发布器](https://astreox.github.io/uBotDocs/develop/ros-publisher/) |
 | 从旧的 ROS 插件迁移 | [从旧插件迁移](https://astreox.github.io/uBotDocs/develop/migration/)、[docs/MIGRATION.md](docs/MIGRATION.md) |
 | 了解协议和设计 | [docs/PROTOCOL.md](docs/PROTOCOL.md)、[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、[docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| 分别配置本地 IMU 队列与 DDS QoS | [docs/LOCAL-QUEUES.md](docs/LOCAL-QUEUES.md) |
 
 ## uBot 系列
 

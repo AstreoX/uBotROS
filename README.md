@@ -92,6 +92,7 @@ The documentation site and `docs/` are in Chinese; [docs/PROTOCOL.md](docs/PROTO
 | publish a custom sensor | [Add a ROS publisher](https://astreox.github.io/uBotDocs/develop/ros-publisher/) |
 | migrate from the old ROS plugins | [Migration](https://astreox.github.io/uBotDocs/develop/migration/), [docs/MIGRATION.md](docs/MIGRATION.md) |
 | read the protocol and design notes | [docs/PROTOCOL.md](docs/PROTOCOL.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| configure local IMU retention independently of DDS | [docs/LOCAL-QUEUES.md](docs/LOCAL-QUEUES.md) |
 
 ## uBot series
 

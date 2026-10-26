@@ -3,6 +3,40 @@
 #include "CoreMinimal.h"
 #include "UBotROSTypes.generated.h"
 
+/** Local UE pending queue policy, independent of the ROS/DDS QoS on the wire. */
+UENUM(BlueprintType)
+enum class EUBotROSLocalQueueMode : uint8 { Legacy, LatestOnly, BoundedFifo };
+
+USTRUCT(BlueprintType)
+struct UBOTROS_API FUBotROSLocalQueueOptions
+{
+    GENERATED_BODY()
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS")
+    EUBotROSLocalQueueMode Mode = EUBotROSLocalQueueMode::Legacy;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS", meta = (ClampMin = "1", ClampMax = "65536"))
+    int32 MaxPendingMessages = 128;
+    /** Monotonic wall-clock lifetime before handoff to the socket. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS", meta = (ClampMin = "0.001"))
+    double MaxAgeSeconds = 0.1;
+
+    static FUBotROSLocalQueueOptions ImuTimeline()
+    {
+        FUBotROSLocalQueueOptions Options;
+        Options.Mode = EUBotROSLocalQueueMode::BoundedFifo;
+        return Options;
+    }
+};
+
+USTRUCT(BlueprintType)
+struct UBOTROS_API FUBotROSLocalQueueOverride
+{
+    GENERATED_BODY()
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS")
+    bool bEnabled = false;
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ROS", meta = (EditCondition = "bEnabled"))
+    FUBotROSLocalQueueOptions Options;
+};
+
 /** ROS 2 QoS reliability policy. */
 UENUM(BlueprintType)
 enum class EUBotROSReliability : uint8

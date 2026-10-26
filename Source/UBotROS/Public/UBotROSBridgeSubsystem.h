@@ -19,30 +19,52 @@ DECLARE_MULTICAST_DELEGATE(FUBotROSBridgeConnectedNative);
 DECLARE_MULTICAST_DELEGATE_OneParam(FUBotROSBridgeDisconnectedNative, const FString& /*Reason*/);
 
 /** Counters of one world's bridge connection (cumulative since the subsystem was created). */
+USTRUCT(BlueprintType)
 struct UBOTROS_API FUBotROSBridgeStats
 {
+    GENERATED_BODY()
     /** Frames completely written to the socket. */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 FramesSent = 0;
     /** Complete frames received from the bridge. */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 FramesReceived = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 BytesSent = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 BytesReceived = 0;
     /**
      * Outgoing messages that were dropped by policy: best_effort messages replaced by a newer one or
      * published while no session was active, data published while the bridge is Disabled, data
      * evicted to make room for reliable messages, and frames in flight when a connection was lost.
      */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 DroppedMessages = 0;
     /** Outgoing messages refused by Publish (reliable queue full or payload above MaxPayloadBytes). */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 RejectedMessages = 0;
     /** Received MESSAGE frames dropped because the dispatch backlog exceeded MaxQueuedBytes. */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 DroppedIncomingMessages = 0;
     /** Bytes of frames waiting in the outgoing queues (not yet handed to the socket). */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int64 QueuedBytes = 0;
     /** Received MESSAGE frames waiting for dispatch on the game thread. */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int32 PendingIncomingMessages = 0;
     /** TCP connections established (each one starts a new session with HELLO). */
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
     int32 SessionCount = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
+    int64 LocalQueueExpiredMessages = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
+    int64 LocalQueueOverflowMessages = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
+    int64 LocalQueueClearedMessages = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
+    int64 LocalQueueDisconnectedMessages = 0;
+    UPROPERTY(BlueprintReadOnly, Category = "uBot|ROS")
+    double MaxLocalQueueAgeMilliseconds = 0;
 };
 
 /**
@@ -50,22 +72,24 @@ struct UBOTROS_API FUBotROSBridgeStats
  * docs/PROTOCOL.md). Socket I/O runs on a background thread; the game thread never blocks on the
  * socket. Received messages are dispatched to subscription callbacks on the game thread during Tick.
  *
- * Outgoing queue policy: a best_effort publisher keeps only its newest pending message (older ones
+ * Legacy outgoing queue policy: a best_effort publisher keeps only its newest pending message (older ones
  * are counted as dropped) and drops data while no session is active; reliable messages are queued in
  * order, also while the bridge is reconnecting, up to MaxQueuedBytes (then the oldest pending
  * best_effort data is evicted first, then new reliable data is rejected with a warning). While the
  * bridge is Disabled nothing is queued. Advertisements and subscriptions persist across reconnects
- * and are re-sent (with the same ids) after every HELLO.
+ * and are re-sent (with the same ids) after every HELLO. Explicit local queue options can retain
+ * a bounded FIFO independently of DDS reliability; FIFO samples never replay on reconnect.
  *
  * All methods are game thread only.
  */
-UCLASS()
+UCLASS(BlueprintType)
 class UBOTROS_API UUBotROSBridgeSubsystem : public UTickableWorldSubsystem
 {
     GENERATED_BODY()
 
 public:
     /** Bridge subsystem of WorldContext's world; nullptr when there is no world or it is not a game/PIE world. */
+    UFUNCTION(BlueprintPure, Category = "uBot|ROS", meta = (WorldContext = "WorldContext"))
     static UUBotROSBridgeSubsystem* Get(const UObject* WorldContext);
 
     //~ Begin USubsystem interface
@@ -95,6 +119,12 @@ public:
      * after every (re)connect otherwise.
      */
     int32 Advertise(const FString& Topic, const FString& Type, const FUBotROSQos& Qos);
+    int32 Advertise(const FString& Topic, const FString& Type, const FUBotROSQos& Qos, const FUBotROSLocalQueueOptions& Queue);
+
+    /** Updates local retention only, clearing old pending messages. Does not alter DDS QoS. */
+    void ConfigurePublisherQueue(int32 PublisherId, const FUBotROSLocalQueueOptions& Queue);
+    /** Drops pending messages; frames already handed to the socket are not truncated. */
+    void ClearPendingMessages(int32 PublisherId);
 
     /** Removes a publisher; its pending best_effort message is discarded. Unknown ids are ignored. */
     void Unadvertise(int32 PublisherId);
@@ -205,6 +235,7 @@ public:
     // Diagnostics (C++)
     // ---------------------------------------------------------------------------------------------
 
+    UFUNCTION(BlueprintPure, Category = "uBot|ROS")
     FUBotROSBridgeStats GetStats() const;
 
     /**
