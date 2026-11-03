@@ -51,6 +51,14 @@ flowchart LR
 | `/<ns>/cmd_vel` | `geometry_msgs/msg/Twist` | ROS 2 → UE |
 | `/<ns>/cmd_attitude`, `/<ns>/cmd_motors` | `mavros_msgs/msg/AttitudeTarget`, `actuator_msgs/msg/Actuators` | ROS 2 → UE |
 
+Command receivers release the previous target when `SetTargetComponent` selects a different target.
+Timeout and end of play stop or release the object that actually accepted the command; a replacement
+that has received no command is left alone. Switching targets keeps the received-command timeout armed.
+
+When several UE clients use the same bridge, each transient-local advertisement keeps its own DDS
+history, so late `/tf_static` subscribers receive every connected client's latest static transform set.
+Unadvertising or disconnecting removes only that source's history. Volatile publishers remain shared.
+
 ## Install
 
 **Recommended: uBot Manager.** Download the installer from the [uBotManager releases](https://github.com/AstreoX/uBotManager/releases), open the `.uproject` and apply the **ROS 2 Sensors** recipe. The recipe installs and enables UBotCore, UBotSensor and uBot ROS; see [Install uBot](https://astreox.github.io/uBotDocs/start/install/).
