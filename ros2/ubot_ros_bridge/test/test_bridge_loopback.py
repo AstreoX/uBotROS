@@ -542,6 +542,105 @@ class BridgeLoopbackTest(unittest.TestCase):
         finally:
             self.ros.node.destroy_subscription(subscription)
 
+    def test_transient_local_publishers_keep_each_advertisement_history(self):
+        topic = "/ubot_test/tf_static_history"
+        first, second = self.client(), self.client()
+        # Match Humble's tf2_ros.TransformListener static reader (depth 100). The reader
+        # must queue several writers' histories; depth 1 can discard arrivals before take().
+        # Each source below still has depth 1, so sharing any writer loses required samples.
+        profile = ros_qos("reliable", "transient_local", 100)
+        wire_qos = qos("reliable", "transient_local", 1)
+        first.advertise(1, topic, "tf2_msgs/msg/TFMessage", wire_qos)
+        # Independent histories apply to ids on the same connection as well as other clients.
+        first.advertise(2, topic, "tf2_msgs/msg/TFMessage", wire_qos)
+        second.advertise(9, topic, "tf2_msgs/msg/TFMessage", wire_qos)
+        first.ping()
+        second.ping()
+        self.assertTrue(self.ros.wait_until(lambda: self.ros.node.count_publishers(topic) == 3))
+
+        def cdr_for(child):
+            transform = TransformStamped()
+            transform.header.frame_id = "world"
+            transform.child_frame_id = child
+            transform.transform.rotation.w = 1.0
+            return serialize_message(TFMessage(transforms=[transform]))
+
+        old = cdr_for("robot_a/old")
+        latest = cdr_for("robot_a/base_link")
+        same_client = cdr_for("robot_a/sensor_link")
+        other_client = cdr_for("robot_b/base_link")
+        first.publish(1, old)
+        first.publish(1, latest)
+        first.publish(2, same_client)
+        second.publish(9, other_client)
+        first.ping()
+        second.ping()
+        # Subscribe only after every PUBLISH has been processed. The bridge must keep CDR opaque.
+        received, subscription = self.ros.collect(TFMessage, topic, profile, raw=True)
+        try:
+            expected = {latest, same_client, other_client}
+            self.assertTrue(
+                self.ros.wait_until(lambda: set(received) == expected),
+                "late reader got {} of {} source histories".format(len(set(received)), len(expected)),
+            )
+            self.ros.spin(0.2)
+            self.assertEqual(set(received), expected)
+            self.assertNotIn(old, received, "KEEP_LAST depth is per advertisement")
+            # Conflicts still use the common topic's QoS even though its writers are separate.
+            first.advertise(3, topic, "tf2_msgs/msg/TFMessage", qos())
+            first.wait_error(ErrorCode.QOS_CONFLICT, 3)
+        finally:
+            self.ros.node.destroy_subscription(subscription)
+
+        first.unadvertise(2)
+        first.ping()
+        self.assertTrue(self.ros.wait_until(lambda: self.ros.node.count_publishers(topic) == 2))
+        received, subscription = self.ros.collect(TFMessage, topic, profile, raw=True)
+        try:
+            self.assertTrue(self.ros.wait_until(lambda: set(received) == {latest, other_client}))
+            self.ros.spin(0.2)
+            self.assertEqual(set(received), {latest, other_client})
+        finally:
+            self.ros.node.destroy_subscription(subscription)
+
+    def test_transient_local_disconnect_removes_only_departing_client_history(self):
+        topic = "/ubot_test/tf_static_disconnect"
+        first, second = self.client(), self.client()
+        wire_qos = qos("reliable", "transient_local", 1)
+        for client in (first, second):
+            client.advertise(1, topic, "tf2_msgs/msg/TFMessage", wire_qos)
+        first_tf, second_tf = TransformStamped(), TransformStamped()
+        first_tf.header.frame_id = second_tf.header.frame_id = "world"
+        first_tf.child_frame_id = "robot_a/base_link"
+        second_tf.child_frame_id = "robot_b/base_link"
+        first_tf.transform.rotation.w = second_tf.transform.rotation.w = 1.0
+        first.publish(1, serialize_message(TFMessage(transforms=[first_tf])))
+        surviving_cdr = serialize_message(TFMessage(transforms=[second_tf]))
+        second.publish(1, surviving_cdr)
+        first.ping()
+        second.ping()
+        self.assertTrue(self.ros.wait_until(lambda: self.ros.node.count_publishers(topic) == 2))
+        first.close()
+        self.assertTrue(self.ros.wait_until(lambda: self.ros.node.count_publishers(topic) == 1))
+
+        received, subscription = self.ros.collect(
+            TFMessage, topic, ros_qos("reliable", "transient_local", 1), raw=True
+        )
+        try:
+            self.assertTrue(self.ros.wait_until(lambda: received))
+            self.ros.spin(0.3)
+            self.assertEqual(set(received), {surviving_cdr})
+        finally:
+            self.ros.node.destroy_subscription(subscription)
+        second.unadvertise(1)
+        second.ping()
+        self.assertTrue(self.ros.wait_until(lambda: self.ros.node.count_publishers(topic) == 0))
+        # Every writer must release its type claim; a new type can then reuse the topic.
+        second.advertise(2, topic, "std_msgs/msg/String", qos())
+        second.ping()
+        self.assertIsNone(second.poll(Op.ERROR, timeout=0.2))
+        self.assertTrue(self.ros.wait_until(lambda: self.ros.node.count_publishers(topic) == 1))
+
     def test_conflicts_and_request_errors(self):
         first = self.client()
         second = self.client()

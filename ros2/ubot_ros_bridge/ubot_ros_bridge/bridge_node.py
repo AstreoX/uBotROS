@@ -98,7 +98,7 @@ class BridgeStopped(Exception):
 
 
 class SharedPublisher:
-    """One rclpy publisher per topic, shared by every client that advertises it."""
+    """An rclpy publisher; volatile advertisements share it, transient_local ones own it."""
 
     __slots__ = ("topic", "type_name", "qos", "publisher", "refs")
 
@@ -584,7 +584,7 @@ class BridgeCore:
         self.logger = self.node.get_logger()
         self.config = self._read_parameters(defaults)
         self.ros_distro = os.environ.get("ROS_DISTRO", "unknown")
-        self._publishers_by_topic: Dict[str, SharedPublisher] = {}
+        self._publishers_by_topic: Dict[str, List[SharedPublisher]] = {}
         self._topic_types: Dict[str, List[Any]] = {}  # topic -> [type_name, users]
         self._message_classes: Dict[str, Any] = {}
         self._clients: Set[ClientConnection] = set()
@@ -861,7 +861,8 @@ class BridgeCore:
             )
         message_class = self._message_class(request)
         self._validate_ros_topic(request)
-        shared = self._publishers_by_topic.get(request.topic)
+        entries = self._publishers_by_topic.get(request.topic, [])
+        shared = entries[0] if entries else None
         if shared is not None:
             if shared.type_name != request.type_name:
                 raise RequestError(
@@ -879,6 +880,10 @@ class BridgeCore:
                     ),
                     request.id,
                 )
+        # Each transient_local advertisement needs its own DDS writer history. Sharing a
+        # KEEP_LAST writer would evict other clients' latched samples (notably /tf_static).
+        # CDR remains opaque; only volatile advertisements can share a writer.
+        if shared is not None and request.qos.durability is proto.Durability.VOLATILE:
             shared.refs += 1
         else:
             self._claim_topic(request.topic, request.type_name, request.id)
@@ -892,7 +897,7 @@ class BridgeCore:
                     ErrorCode.ROS_ERROR, "create_publisher failed: {}".format(exc), request.id
                 )
             shared = SharedPublisher(request.topic, request.type_name, request.qos, publisher)
-            self._publishers_by_topic[request.topic] = shared
+            self._publishers_by_topic.setdefault(request.topic, []).append(shared)
         client.publications[request.id] = shared
         self.logger.info(
             "{}: advertised {} [{}] id={} qos={} (clients sharing it: {})".format(
@@ -918,8 +923,11 @@ class BridgeCore:
         shared.refs -= 1
         if shared.refs > 0:
             return
-        if self._publishers_by_topic.get(shared.topic) is shared:
-            del self._publishers_by_topic[shared.topic]
+        entries = self._publishers_by_topic.get(shared.topic)
+        if entries is not None:
+            entries.remove(shared)
+            if not entries:
+                del self._publishers_by_topic[shared.topic]
         self._release_topic(shared.topic)
         try:
             self.node.destroy_publisher(shared.publisher)
