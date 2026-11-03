@@ -56,3 +56,24 @@ $env:UBOT_ROS_E2E = '1'
 UE 测试发布 IMU、点云、静态 TF 和 `/clock`，并订阅 `/ubot_e2e/cmd_vel`。检查脚本退出码 0 表示它在 `--timeout` 内收到并核对了 IMU、点云、`/tf_static` 和至少一条 `/clock`；UE 测试在 20 秒内收到脚本发布的 Twist（linear `(1.5, 0, 0)`，angular `(0, 0, 0.25)`）即通过。
 
 `UBotROS.EndToEnd.FlightCommands` 不用检查脚本：桥需要 `mavros_msgs` 和 `actuator_msgs`，在 WSL 里用 `ros2 topic pub` 向 `/ubot_e2e/cmd_attitude` 和 `/ubot_e2e/cmd_motors` 发消息（命令写在该测试的源码注释里），设置 `UBOT_ROS_E2E_FLIGHT=1` 后运行，20 秒内两个组件都收到并换算出正确的指令即通过。
+
+### 传感器与 TF 时序矩阵
+
+`UBotROS.EndToEnd.SensorTiming` 是显式开启的集成实验，默认只输出未运行的提示。它创建真实碰撞几何、LiDAR、IMU 和里程计，覆盖帧率、传感器频率、组件注册顺序、起始偏移、帧抖动和密集点云，共 30 组。实验保留默认 FrameTick 行为，不修改生产发布器或示例资产。
+
+先在两个独立的 ROS 2 Humble 终端中进入 `ros2/ubot_ros_bridge`，都执行 `source /opt/ros/humble/setup.bash`，并设置相同且不与其他测试共用的 `ROS_DOMAIN_ID`；本机运行可同时设置 `ROS_LOCALHOST_ONLY=1`。分别运行：
+
+```bash
+python3 test/sensor_timing_probe.py bridge --port 8278 --out <results>/wire.json
+python3 test/sensor_timing_probe.py probe --out <results>/ros.json
+```
+
+探针输出 `TIMING_PROBE_READY` 且桥开始监听后，在 Windows 设置 `UBOT_ROS_TIMING=1`、`UBOT_ROS_TIMING_PORT=8278`、`UBOT_ROS_TIMING_OUT=<results>/ue.json`，再按上面的 UE 命令运行 `UBotROS.EndToEnd.SensorTiming`。`UBOT_ROS_TIMING_HOST` 默认是 `127.0.0.1`；`UBOT_ROS_TIMING_CASES` 可设为逗号分隔的编号以运行子集，空值运行全部。完整矩阵通常需要数分钟。
+
+UE 结束后，用 SIGTERM 停止探针及桥以保存结果。在三个输出都可读的环境中合并分析：
+
+```bash
+python3 test/sensor_timing_probe.py analyze --ue <results>/ue.json --wire <results>/wire.json --ros <results>/ros.json --out <results>/summary.json
+```
+
+同时检查 UE 和分析器退出码。分析检查真实点云接收、最终 TF 可用性、独立 TF listener 下 200 ms 等待、插值位置及可靠消息拒绝；立即查询成功率属于观测结果，不要求每个点云在回调刚开始时都有 TF。不要把未开启实验时的测试成功计作矩阵通过。
