@@ -1,7 +1,7 @@
 {
   "format": 1,
   "plugin": "UBotROS",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "engine": "5.5",
   "repository": "https://github.com/AstreoX/uBotROS",
   "generator": "UBotDocExport 1",
@@ -45,10 +45,10 @@
       "module": "UBotROS",
       "header": "Source/UBotROS/Public/UBotROSBridgeSubsystem.h",
       "category": "",
-      "tooltip": "One TCP connection per game/PIE world to the ROS-side ubot_ros_bridge node (wire protocol v1,\ndocs/PROTOCOL.md). Socket I/O runs on a background thread; the game thread never blocks on the\nsocket. Received messages are dispatched to subscription callbacks on the game thread during Tick.\n\nOutgoing queue policy: a best_effort publisher keeps only its newest pending message (older ones\nare counted as dropped) and drops data while no session is active; reliable messages are queued in\norder, also while the bridge is reconnecting, up to MaxQueuedBytes (then the oldest pending\nbest_effort data is evicted first, then new reliable data is rejected with a warning). While the\nbridge is Disabled nothing is queued. Advertisements and subscriptions persist across reconnects\nand are re-sent (with the same ids) after every HELLO.\n\nAll methods are game thread only.",
+      "tooltip": "One TCP connection per game/PIE world to the ROS-side ubot_ros_bridge node (wire protocol v1,\ndocs/PROTOCOL.md). Socket I/O runs on a background thread; the game thread never blocks on the\nsocket. Received messages are dispatched to subscription callbacks on the game thread during Tick.\n\nLegacy outgoing queue policy: a best_effort publisher keeps only its newest pending message (older ones\nare counted as dropped) and drops data while no session is active; reliable messages are queued in\norder, also while the bridge is reconnecting, up to MaxQueuedBytes (then the oldest pending\nbest_effort data is evicted first, then new reliable data is rejected with a warning). While the\nbridge is Disabled nothing is queued. Advertisements and subscriptions persist across reconnects\nand are re-sent (with the same ids) after every HELLO. Explicit local queue options can retain\na bounded FIFO independently of DDS reliability; FIFO samples never replay on reconnect.\n\nAll methods are game thread only.",
       "flags": {
         "abstract": false,
-        "blueprintType": false,
+        "blueprintType": true,
         "blueprintable": false,
         "spawnable": false,
         "deprecated": false
@@ -58,9 +58,11 @@
         "UUBotROSBridgeSubsystem.Connect",
         "UUBotROSBridgeSubsystem.ConnectTo",
         "UUBotROSBridgeSubsystem.Disconnect",
+        "UUBotROSBridgeSubsystem.Get",
         "UUBotROSBridgeSubsystem.GetBridgeEndpoint",
         "UUBotROSBridgeSubsystem.GetBridgeStatus",
         "UUBotROSBridgeSubsystem.GetLastBridgeError",
+        "UUBotROSBridgeSubsystem.GetStats",
         "UUBotROSBridgeSubsystem.IsBridgeConnected",
         "UUBotROSBridgeSubsystem.OnBridgeConnected",
         "UUBotROSBridgeSubsystem.OnBridgeDisconnected"
@@ -295,6 +297,25 @@
           "access": "readOnly",
           "editable": "anywhere",
           "tooltip": "Empty or unresolved -> base component of the owner's uBot identity (default: root component).",
+          "meta": {}
+        },
+        {
+          "id": "LocalQueueOverride",
+          "displayName": "Local Queue Override",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOverride",
+            "subtypeDisplay": "UBot ROSLocal Queue Override",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "(Options=(MaxPendingMessages=128,MaxAgeSeconds=0.100000))",
+          "category": "ROS|Queue",
+          "access": "readOnly",
+          "editable": "anywhere",
+          "tooltip": "Optional local pending queue policy, independent of Sensor Data QoS.",
           "meta": {}
         },
         {
@@ -893,6 +914,446 @@
   ],
   "nodes": [
     {
+      "id": "Break:FUBotROSBridgeStats",
+      "kind": "break",
+      "title": "Break UBot ROSBridge Stats",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that breaks a 'UBot ROSBridge Stats' into its member fields",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "UBotROSBridgeStats",
+          "name": "UBot ROSBridge Stats",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSBridgeStats",
+            "subtypeDisplay": "UBot ROSBridge Stats",
+            "container": "none",
+            "valueType": null,
+            "byRef": true,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "FramesSent",
+          "name": "Frames Sent",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Frames completely written to the socket."
+        },
+        {
+          "id": "FramesReceived",
+          "name": "Frames Received",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Complete frames received from the bridge."
+        },
+        {
+          "id": "BytesSent",
+          "name": "Bytes Sent",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        },
+        {
+          "id": "BytesReceived",
+          "name": "Bytes Received",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        },
+        {
+          "id": "DroppedMessages",
+          "name": "Dropped Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": "Outgoing messages that were dropped by policy: best_effort messages replaced by a newer one or\npublished while no session was active, data published while the bridge is Disabled, data\nevicted to make room for reliable messages, and frames in flight when a connection was lost."
+        },
+        {
+          "id": "RejectedMessages",
+          "name": "Rejected Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": "Outgoing messages refused by Publish (reliable queue full or payload above MaxPayloadBytes)."
+        },
+        {
+          "id": "DroppedIncomingMessages",
+          "name": "Dropped Incoming Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": "Received MESSAGE frames dropped because the dispatch backlog exceeded MaxQueuedBytes."
+        },
+        {
+          "id": "QueuedBytes",
+          "name": "Queued Bytes",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": "Bytes of frames waiting in the outgoing queues (not yet handed to the socket)."
+        },
+        {
+          "id": "PendingIncomingMessages",
+          "name": "Pending Incoming Messages",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": "Received MESSAGE frames waiting for dispatch on the game thread."
+        },
+        {
+          "id": "SessionCount",
+          "name": "Session Count",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": "TCP connections established (each one starts a new session with HELLO)."
+        },
+        {
+          "id": "LocalQueueExpiredMessages",
+          "name": "Local Queue Expired Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        },
+        {
+          "id": "LocalQueueOverflowMessages",
+          "name": "Local Queue Overflow Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        },
+        {
+          "id": "LocalQueueClearedMessages",
+          "name": "Local Queue Cleared Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        },
+        {
+          "id": "LocalQueueDisconnectedMessages",
+          "name": "Local Queue Disconnected Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        },
+        {
+          "id": "MaxLocalQueueAgeMilliseconds",
+          "name": "Max Local Queue Age Milliseconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": true,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "Break:FUBotROSLocalQueueOptions",
+      "kind": "break",
+      "title": "Break UBot ROSLocal Queue Options",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that breaks a 'UBot ROSLocal Queue Options' into its member fields",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "UBotROSLocalQueueOptions",
+          "name": "UBot ROSLocal Queue Options",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOptions",
+            "subtypeDisplay": "UBot ROSLocal Queue Options",
+            "container": "none",
+            "valueType": null,
+            "byRef": true,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "Mode",
+          "name": "Mode",
+          "type": {
+            "category": "enum",
+            "subtype": "EUBotROSLocalQueueMode",
+            "subtypeDisplay": "EUBot ROSLocal Queue Mode",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "MaxPendingMessages",
+          "name": "Max Pending Messages",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "MaxAgeSeconds",
+          "name": "Max Age Seconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": "Monotonic wall-clock lifetime before handoff to the socket."
+        }
+      ]
+    },
+    {
+      "id": "Break:FUBotROSLocalQueueOverride",
+      "kind": "break",
+      "title": "Break UBot ROSLocal Queue Override",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that breaks a 'UBot ROSLocal Queue Override' into its member fields",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "UBotROSLocalQueueOverride",
+          "name": "UBot ROSLocal Queue Override",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOverride",
+            "subtypeDisplay": "UBot ROSLocal Queue Override",
+            "container": "none",
+            "valueType": null,
+            "byRef": true,
+            "const": true
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "bEnabled",
+          "name": "Enabled",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "Options",
+          "name": "Options",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOptions",
+            "subtypeDisplay": "UBot ROSLocal Queue Options",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
       "id": "Break:FUBotROSQos",
       "kind": "break",
       "title": "Break UBot ROSQos",
@@ -1121,6 +1582,205 @@
           "default": "",
           "advanced": false,
           "tooltip": "Topic used instead of the default when bOverride is set; the owning component resolves it."
+        }
+      ]
+    },
+    {
+      "id": "Make:FUBotROSBridgeStats",
+      "kind": "make",
+      "title": "Make UBot ROSBridge Stats",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that create a 'UBot ROSBridge Stats' from its members",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "UBotROSBridgeStats",
+          "name": "UBot ROSBridge Stats",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSBridgeStats",
+            "subtypeDisplay": "UBot ROSBridge Stats",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "Make:FUBotROSLocalQueueOptions",
+      "kind": "make",
+      "title": "Make UBot ROSLocal Queue Options",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that create a 'UBot ROSLocal Queue Options' from its members",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "Mode",
+          "name": "Mode",
+          "type": {
+            "category": "enum",
+            "subtype": "EUBotROSLocalQueueMode",
+            "subtypeDisplay": "EUBot ROSLocal Queue Mode",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "Legacy",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "MaxPendingMessages",
+          "name": "Max Pending Messages",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "128",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "MaxAgeSeconds",
+          "name": "Max Age Seconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "0.100000",
+          "advanced": false,
+          "tooltip": "Monotonic wall-clock lifetime before handoff to the socket."
+        }
+      ],
+      "outputs": [
+        {
+          "id": "UBotROSLocalQueueOptions",
+          "name": "UBot ROSLocal Queue Options",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOptions",
+            "subtypeDisplay": "UBot ROSLocal Queue Options",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "Make:FUBotROSLocalQueueOverride",
+      "kind": "make",
+      "title": "Make UBot ROSLocal Queue Override",
+      "subtitle": "",
+      "owner": "",
+      "member": "",
+      "category": "Utilities|Struct",
+      "tooltip": "Adds a node that create a 'UBot ROSLocal Queue Override' from its members",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "bEnabled",
+          "name": "Enabled",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "False",
+          "advanced": false,
+          "tooltip": ""
+        },
+        {
+          "id": "Options",
+          "name": "Options",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOptions",
+            "subtypeDisplay": "UBot ROSLocal Queue Options",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "(Mode=Legacy,MaxPendingMessages=128,MaxAgeSeconds=0.100000)",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "UBotROSLocalQueueOverride",
+          "name": "UBot ROSLocal Queue Override",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOverride",
+            "subtypeDisplay": "UBot ROSLocal Queue Override",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
         }
       ]
     },
@@ -1832,6 +2492,45 @@
       ]
     },
     {
+      "id": "UUBotROSBridgeSubsystem.Get",
+      "kind": "pure",
+      "title": "Get",
+      "subtitle": "",
+      "owner": "UUBotROSBridgeSubsystem",
+      "member": "Get",
+      "category": "uBot|ROS",
+      "tooltip": "Bridge subsystem of WorldContext's world; nullptr when there is no world or it is not a game/PIE world.",
+      "keywords": "",
+      "flags": {
+        "static": true,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [],
+      "outputs": [
+        {
+          "id": "ReturnValue",
+          "name": "Return Value",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotROSBridgeSubsystem",
+            "subtypeDisplay": "UBot ROSBridge Subsystem",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
       "id": "UUBotROSBridgeSubsystem.GetBridgeEndpoint",
       "kind": "pure",
       "title": "Get Bridge Endpoint",
@@ -1991,6 +2690,63 @@
             "category": "string",
             "subtype": "",
             "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "UUBotROSBridgeSubsystem.GetStats",
+      "kind": "pure",
+      "title": "Get Stats",
+      "subtitle": "Target is UBot ROSBridge Subsystem",
+      "subtitleZh": "目标是UBot ROSBridge Subsystem",
+      "owner": "UUBotROSBridgeSubsystem",
+      "member": "GetStats",
+      "category": "uBot|ROS",
+      "tooltip": "Diagnostics (C++)",
+      "keywords": "",
+      "flags": {
+        "static": false,
+        "latent": false,
+        "deprecated": false,
+        "developmentOnly": false,
+        "callInEditor": false,
+        "compact": false
+      },
+      "compactTitle": "",
+      "inputs": [
+        {
+          "id": "self",
+          "name": "Target",
+          "type": {
+            "category": "object",
+            "subtype": "UUBotROSBridgeSubsystem",
+            "subtypeDisplay": "UBot ROSBridge Subsystem",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "default": "",
+          "advanced": false,
+          "tooltip": ""
+        }
+      ],
+      "outputs": [
+        {
+          "id": "ReturnValue",
+          "name": "Return Value",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSBridgeStats",
+            "subtypeDisplay": "UBot ROSBridge Stats",
             "container": "none",
             "valueType": null,
             "byRef": false,
@@ -4717,6 +5473,339 @@
   ],
   "structs": [
     {
+      "id": "FUBotROSBridgeStats",
+      "displayName": "UBot ROSBridge Stats",
+      "module": "UBotROS",
+      "header": "Source/UBotROS/Public/UBotROSBridgeSubsystem.h",
+      "tooltip": "Counters of one world's bridge connection (cumulative since the subsystem was created).",
+      "fields": [
+        {
+          "id": "BytesReceived",
+          "displayName": "Bytes Received",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "BytesSent",
+          "displayName": "Bytes Sent",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "DroppedIncomingMessages",
+          "displayName": "Dropped Incoming Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Received MESSAGE frames dropped because the dispatch backlog exceeded MaxQueuedBytes.",
+          "access": "readOnly"
+        },
+        {
+          "id": "DroppedMessages",
+          "displayName": "Dropped Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Outgoing messages that were dropped by policy: best_effort messages replaced by a newer one or\npublished while no session was active, data published while the bridge is Disabled, data\nevicted to make room for reliable messages, and frames in flight when a connection was lost.",
+          "access": "readOnly"
+        },
+        {
+          "id": "FramesReceived",
+          "displayName": "Frames Received",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Complete frames received from the bridge.",
+          "access": "readOnly"
+        },
+        {
+          "id": "FramesSent",
+          "displayName": "Frames Sent",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Frames completely written to the socket.",
+          "access": "readOnly"
+        },
+        {
+          "id": "LocalQueueClearedMessages",
+          "displayName": "Local Queue Cleared Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "LocalQueueDisconnectedMessages",
+          "displayName": "Local Queue Disconnected Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "LocalQueueExpiredMessages",
+          "displayName": "Local Queue Expired Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "LocalQueueOverflowMessages",
+          "displayName": "Local Queue Overflow Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "MaxLocalQueueAgeMilliseconds",
+          "displayName": "Max Local Queue Age Milliseconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readOnly"
+        },
+        {
+          "id": "PendingIncomingMessages",
+          "displayName": "Pending Incoming Messages",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Received MESSAGE frames waiting for dispatch on the game thread.",
+          "access": "readOnly"
+        },
+        {
+          "id": "QueuedBytes",
+          "displayName": "Queued Bytes",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Bytes of frames waiting in the outgoing queues (not yet handed to the socket).",
+          "access": "readOnly"
+        },
+        {
+          "id": "RejectedMessages",
+          "displayName": "Rejected Messages",
+          "type": {
+            "category": "int64",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Outgoing messages refused by Publish (reliable queue full or payload above MaxPayloadBytes).",
+          "access": "readOnly"
+        },
+        {
+          "id": "SessionCount",
+          "displayName": "Session Count",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "TCP connections established (each one starts a new session with HELLO).",
+          "access": "readOnly"
+        }
+      ],
+      "make": "Make:FUBotROSBridgeStats",
+      "break": "Break:FUBotROSBridgeStats"
+    },
+    {
+      "id": "FUBotROSLocalQueueOptions",
+      "displayName": "UBot ROSLocal Queue Options",
+      "module": "UBotROS",
+      "header": "Source/UBotROS/Public/UBotROSTypes.h",
+      "tooltip": "",
+      "fields": [
+        {
+          "id": "MaxAgeSeconds",
+          "displayName": "Max Age Seconds",
+          "type": {
+            "category": "double",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "Monotonic wall-clock lifetime before handoff to the socket.",
+          "access": "readWrite"
+        },
+        {
+          "id": "MaxPendingMessages",
+          "displayName": "Max Pending Messages",
+          "type": {
+            "category": "int",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readWrite"
+        },
+        {
+          "id": "Mode",
+          "displayName": "Mode",
+          "type": {
+            "category": "enum",
+            "subtype": "EUBotROSLocalQueueMode",
+            "subtypeDisplay": "EUBot ROSLocal Queue Mode",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readWrite"
+        }
+      ],
+      "make": "Make:FUBotROSLocalQueueOptions",
+      "break": "Break:FUBotROSLocalQueueOptions"
+    },
+    {
+      "id": "FUBotROSLocalQueueOverride",
+      "displayName": "UBot ROSLocal Queue Override",
+      "module": "UBotROS",
+      "header": "Source/UBotROS/Public/UBotROSTypes.h",
+      "tooltip": "",
+      "fields": [
+        {
+          "id": "Options",
+          "displayName": "Options",
+          "type": {
+            "category": "struct",
+            "subtype": "FUBotROSLocalQueueOptions",
+            "subtypeDisplay": "UBot ROSLocal Queue Options",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readWrite"
+        },
+        {
+          "id": "bEnabled",
+          "displayName": "Enabled",
+          "type": {
+            "category": "bool",
+            "subtype": "",
+            "subtypeDisplay": "",
+            "container": "none",
+            "valueType": null,
+            "byRef": false,
+            "const": false
+          },
+          "tooltip": "",
+          "access": "readWrite"
+        }
+      ],
+      "make": "Make:FUBotROSLocalQueueOverride",
+      "break": "Break:FUBotROSLocalQueueOverride"
+    },
+    {
       "id": "FUBotROSQos",
       "displayName": "UBot ROSQos",
       "module": "UBotROS",
@@ -4905,6 +5994,33 @@
         {
           "id": "Volatile",
           "displayName": "Volatile",
+          "value": 0,
+          "tooltip": ""
+        }
+      ]
+    },
+    {
+      "id": "EUBotROSLocalQueueMode",
+      "displayName": "EUBot ROSLocal Queue Mode",
+      "module": "UBotROS",
+      "header": "Source/UBotROS/Public/UBotROSTypes.h",
+      "tooltip": "Local UE pending queue policy, independent of the ROS/DDS QoS on the wire.",
+      "values": [
+        {
+          "id": "BoundedFifo",
+          "displayName": "Bounded Fifo",
+          "value": 2,
+          "tooltip": ""
+        },
+        {
+          "id": "LatestOnly",
+          "displayName": "Latest Only",
+          "value": 1,
+          "tooltip": ""
+        },
+        {
+          "id": "Legacy",
+          "displayName": "Legacy",
           "value": 0,
           "tooltip": ""
         }
