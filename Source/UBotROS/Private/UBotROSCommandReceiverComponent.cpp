@@ -24,6 +24,7 @@ UUBotROSCommandReceiverComponent::UUBotROSCommandReceiverComponent()
 void UUBotROSCommandReceiverComponent::BeginPlay()
 {
     Super::BeginPlay();
+    bEndingPlay = false;
     if (bAutoStartReceiver)
     {
         StartReceiver();
@@ -32,6 +33,8 @@ void UUBotROSCommandReceiverComponent::BeginPlay()
 
 void UUBotROSCommandReceiverComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    bEndingPlay = true;
+    ++CommandRevision;
     StopReceiver();
 
     // The timeout tick stops with the component, so release the target now instead of leaving it on the last command.
@@ -39,10 +42,7 @@ void UUBotROSCommandReceiverComponent::EndPlay(const EEndPlayReason::Type EndPla
     {
         bCommandActive = false;
         SetComponentTickEnabled(false);
-        if (UObject* Target = ResolveCommandTarget(nullptr); IsValid(Target))
-        {
-            ReleaseTarget(Target);
-        }
+        ReleaseCommandTarget();
     }
 
     Super::EndPlay(EndPlayReason);
@@ -72,10 +72,20 @@ UObject* UUBotROSCommandReceiverComponent::GetCommandTarget() const
 
 void UUBotROSCommandReceiverComponent::SetTargetComponent(UActorComponent* NewTarget)
 {
+    UObject* PreviousTarget = ResolveCommandTarget(nullptr);
     TargetComponent = FComponentReference();
     TargetComponent.OverrideComponent = NewTarget;
     bTargetErrorReported = false;
     bRejectionReported = false;
+    UObject* ResolvedTarget = ResolveCommandTarget(nullptr);
+    if (PreviousTarget != ResolvedTarget)
+    {
+        ++CommandRevision;
+    }
+    if (AcceptedCommandTarget.Get() != ResolvedTarget)
+    {
+        ReleaseCommandTarget();
+    }
 }
 
 bool UUBotROSCommandReceiverComponent::RestartCommandReceiver()
@@ -228,8 +238,18 @@ UObject* UUBotROSCommandReceiverComponent::ResolveCommandTarget(FString* OutErro
 
 UObject* UUBotROSCommandReceiverComponent::ResolveTargetForDispatch()
 {
+    const uint64 DispatchRevision = CommandRevision;
     FString TargetError;
     UObject* Target = ResolveCommandTarget(&TargetError);
+    if (AcceptedCommandTarget.Get() != Target)
+    {
+        ReleaseCommandTarget();
+    }
+    // Releasing a target can invoke user code that changes the target or dispatches a newer command.
+    if (DispatchRevision != CommandRevision || bEndingPlay || (Target && !IsValid(Target)))
+    {
+        return nullptr;
+    }
     if (!TargetError.IsEmpty())
     {
         // Configuration problems are reported once per start, not once per message.
@@ -246,6 +266,7 @@ UObject* UUBotROSCommandReceiverComponent::ResolveTargetForDispatch()
 
 void UUBotROSCommandReceiverComponent::NoteValidCommand()
 {
+    ++CommandRevision;
     LastCommandSimTimeSeconds = UBot::Clock::GetSimTimeSeconds(this);
     bCommandActive = true;
     LastLoggedError.Reset();
@@ -257,12 +278,28 @@ void UUBotROSCommandReceiverComponent::NoteValidCommand()
 
 void UUBotROSCommandReceiverComponent::NoteDispatchResult(const UObject* Target, bool bAccepted, const TCHAR* What)
 {
+    NoteDispatchResult(const_cast<UObject*>(Target), bAccepted, What, CommandRevision);
+}
+
+void UUBotROSCommandReceiverComponent::NoteDispatchResult(UObject* Target, bool bAccepted, const TCHAR* What, uint64 DispatchRevision)
+{
     if (bAccepted)
     {
+        if (DispatchRevision != CommandRevision || bEndingPlay || ResolveCommandTarget(nullptr) != Target)
+        {
+            // A setter, EndPlay or another command ran inside Apply*. Do not orphan that accepted
+            // command, or release a newer command already held by the same target.
+            if (IsValid(Target) && AcceptedCommandTarget.Get() != Target)
+            {
+                ReleaseTarget(Target);
+            }
+            return;
+        }
+        AcceptedCommandTarget = Target;
         bRejectionReported = false;
         return;
     }
-    if (!bRejectionReported)
+    if (DispatchRevision == CommandRevision && !bEndingPlay && !bRejectionReported)
     {
         bRejectionReported = true;
         ReportError(FString::Printf(TEXT("%s: %s rejected the %s."), *GetPathNameSafe(this), *GetPathNameSafe(Target), What), false);
@@ -286,12 +323,21 @@ void UUBotROSCommandReceiverComponent::CheckCommandTimeout()
     // Clear the state first so a handler that sends a new command re-arms a fresh timeout.
     bCommandActive = false;
     SetComponentTickEnabled(false);
-    if (UObject* Target = ResolveCommandTarget(nullptr))
+    ++CommandRevision;
+    ReleaseCommandTarget();
+    UE_LOG(LogUBotROSCommand, Verbose, TEXT("%s: no command for %.3f s; target released."), *GetPathNameSafe(this), ElapsedSeconds);
+    OnCommandTimeout.Broadcast();
+}
+
+void UUBotROSCommandReceiverComponent::ReleaseCommandTarget()
+{
+    UObject* Target = AcceptedCommandTarget.Get();
+    // Clear ownership before invoking a Blueprint/native callback, which may reenter this receiver.
+    AcceptedCommandTarget.Reset();
+    if (IsValid(Target))
     {
         ReleaseTarget(Target);
     }
-    UE_LOG(LogUBotROSCommand, Verbose, TEXT("%s: no command for %.3f s; target released."), *GetPathNameSafe(this), ElapsedSeconds);
-    OnCommandTimeout.Broadcast();
 }
 
 void UUBotROSCommandReceiverComponent::ReportError(const FString& Message, bool bSetupError)

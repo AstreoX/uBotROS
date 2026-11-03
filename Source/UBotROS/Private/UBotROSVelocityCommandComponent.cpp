@@ -39,6 +39,7 @@ UUBotROSVelocityCommandComponent::UUBotROSVelocityCommandComponent()
 void UUBotROSVelocityCommandComponent::BeginPlay()
 {
     Super::BeginPlay();
+    bEndingPlay = false;
     if (bAutoStartReceiver)
     {
         StartReceiver();
@@ -47,6 +48,8 @@ void UUBotROSVelocityCommandComponent::BeginPlay()
 
 void UUBotROSVelocityCommandComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    bEndingPlay = true;
+    ++CommandRevision;
     StopReceiver();
 
     // The timeout tick stops with the component, so stop the target now instead of leaving it moving.
@@ -54,10 +57,7 @@ void UUBotROSVelocityCommandComponent::EndPlay(const EEndPlayReason::Type EndPla
     {
         bCommandActive = false;
         SetComponentTickEnabled(false);
-        if (UObject* Target = ResolveCommandTarget(nullptr); IsValid(Target))
-        {
-            IUBotVelocityCommandable::Execute_StopMotion(Target);
-        }
+        ReleaseCommandTarget();
     }
 
     Super::EndPlay(EndPlayReason);
@@ -87,10 +87,20 @@ UObject* UUBotROSVelocityCommandComponent::GetCommandTarget() const
 
 void UUBotROSVelocityCommandComponent::SetTargetComponent(UActorComponent* NewTarget)
 {
+    UObject* PreviousTarget = ResolveCommandTarget(nullptr);
     TargetComponent = FComponentReference();
     TargetComponent.OverrideComponent = NewTarget;
     bTargetErrorReported = false;
     bRejectionReported = false;
+    UObject* ResolvedTarget = ResolveCommandTarget(nullptr);
+    if (PreviousTarget != ResolvedTarget)
+    {
+        ++CommandRevision;
+    }
+    if (AcceptedCommandTarget.Get() != ResolvedTarget)
+    {
+        ReleaseCommandTarget();
+    }
 }
 
 bool UUBotROSVelocityCommandComponent::RestartCommandReceiver()
@@ -249,6 +259,10 @@ UObject* UUBotROSVelocityCommandComponent::ResolveCommandTarget(FString* OutErro
 
 void UUBotROSVelocityCommandComponent::HandleTwistPayload(TConstArrayView<uint8> Cdr)
 {
+    if (bEndingPlay)
+    {
+        return;
+    }
     namespace Local = UBot::ROSVelocityCommand::Private;
 
     // UBot::Ros::Decode runs FUBotRosTwist::Deserialize on a bounds-checked FUBotCdrReader.
@@ -273,6 +287,7 @@ void UUBotROSVelocityCommandComponent::HandleTwistPayload(TConstArrayView<uint8>
     Command.AngularVelocityRadiansPerSecond = Local::ClampNorm(Command.AngularVelocityRadiansPerSecond, MaxAngularSpeedRadiansPerSecond);
 
     // A valid command re-arms both the timeout and the error log de-duplication.
+    ++CommandRevision;
     LastCommand = Command;
     LastCommandSimTimeSeconds = NowSeconds;
     bCommandActive = true;
@@ -288,8 +303,17 @@ void UUBotROSVelocityCommandComponent::HandleTwistPayload(TConstArrayView<uint8>
 
 void UUBotROSVelocityCommandComponent::DispatchCommand(const FUBotVelocityCommand& Command)
 {
+    const uint64 DispatchRevision = CommandRevision;
     FString TargetError;
     UObject* Target = ResolveCommandTarget(&TargetError);
+    if (AcceptedCommandTarget.Get() != Target)
+    {
+        ReleaseCommandTarget();
+    }
+    if (DispatchRevision != CommandRevision || bEndingPlay || (Target && !IsValid(Target)))
+    {
+        return;
+    }
     if (!TargetError.IsEmpty())
     {
         // Configuration problems are reported once per start, not once per message.
@@ -308,10 +332,19 @@ void UUBotROSVelocityCommandComponent::DispatchCommand(const FUBotVelocityComman
 
     if (IUBotVelocityCommandable::Execute_ApplyVelocityCommand(Target, Command))
     {
+        if (DispatchRevision != CommandRevision || bEndingPlay || ResolveCommandTarget(nullptr) != Target)
+        {
+            if (IsValid(Target) && AcceptedCommandTarget.Get() != Target)
+            {
+                IUBotVelocityCommandable::Execute_StopMotion(Target);
+            }
+            return;
+        }
+        AcceptedCommandTarget = Target;
         bRejectionReported = false;
         return;
     }
-    if (!bRejectionReported)
+    if (DispatchRevision == CommandRevision && !bEndingPlay && !bRejectionReported)
     {
         bRejectionReported = true;
         ReportError(FString::Printf(TEXT("%s: %s rejected the velocity command."), *GetPathNameSafe(this), *GetPathNameSafe(Target)), false);
@@ -335,12 +368,20 @@ void UUBotROSVelocityCommandComponent::CheckCommandTimeout()
     // Clear the state first so a handler that sends a new command re-arms a fresh timeout.
     bCommandActive = false;
     SetComponentTickEnabled(false);
-    if (UObject* Target = ResolveCommandTarget(nullptr))
+    ++CommandRevision;
+    ReleaseCommandTarget();
+    UE_LOG(LogUBotROSVelocityCommand, Verbose, TEXT("%s: no velocity command for %.3f s; motion stopped."), *GetPathNameSafe(this), ElapsedSeconds);
+    OnCommandTimeout.Broadcast();
+}
+
+void UUBotROSVelocityCommandComponent::ReleaseCommandTarget()
+{
+    UObject* Target = AcceptedCommandTarget.Get();
+    AcceptedCommandTarget.Reset();
+    if (IsValid(Target))
     {
         IUBotVelocityCommandable::Execute_StopMotion(Target);
     }
-    UE_LOG(LogUBotROSVelocityCommand, Verbose, TEXT("%s: no velocity command for %.3f s; motion stopped."), *GetPathNameSafe(this), ElapsedSeconds);
-    OnCommandTimeout.Broadcast();
 }
 
 void UUBotROSVelocityCommandComponent::ReportError(const FString& Message, bool bSetupError)

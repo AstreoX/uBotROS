@@ -151,9 +151,13 @@ UE plugin uses:
 
 - `ADVERTISE {"id":7,"topic":"/ubot/imu","type":"sensor_msgs/msg/Imu","qos":Q}` registers publisher
   id 7 of this connection.
-- The bridge keeps **one rclpy publisher per (topic, type)**, shared by all ids and all clients that
-  advertise it, reference counted; it is destroyed when the last id releases it (UNADVERTISE or
-  disconnect). The QoS of the first advertiser creates the publisher; a later ADVERTISE of the same
+- With **volatile** durability, the bridge keeps one rclpy publisher per topic, shared by all ids
+  and clients and reference counted; it is destroyed when the last id releases it (UNADVERTISE or
+  disconnect). With **transient_local** durability, each ADVERTISE id has an independent rclpy
+  publisher and KEEP_LAST history, including ids on the same connection. This preserves each source's
+  latched samples for late subscribers without inspecting or merging CDR. UNADVERTISE or disconnect
+  destroys only the corresponding source's writer and history. All advertisements of a topic must
+  still use identical type and QoS; a later ADVERTISE of the same
   topic with a different **type** → `ERROR type_conflict`, with a different **QoS** → `ERROR
   qos_conflict`. In both cases the id is not registered (its later `PUBLISH`es fail with `unknown_id`).
 - Errors (all keep the connection open, `id` set to the request id when it could be parsed):
@@ -201,7 +205,7 @@ The bridge publishes the CDR bytes unchanged with `publisher.publish(bytes(cdr))
 ```
 
 - Keys are publisher ids of **this connection** as decimal strings; values are the current
-  `publisher.get_subscription_count()` of the shared publisher of that id (ROS subscribers on the
+  `publisher.get_subscription_count()` of the publisher of that id (ROS subscribers on the
   topic, other bridge clients' subscriptions included).
 - Sent **on change** (any value changed, an id appeared or disappeared) and **at most every 0.5 s** per
   connection. The bridge polls the counts periodically (e.g. every 0.1 s). A newly advertised id appears
@@ -274,8 +278,8 @@ The bridge publishes the CDR bytes unchanged with `publisher.publish(bytes(cdr))
   reliable `PUBLISH`es it queued while disconnected, then live traffic.
 - The client reconnects every `ReconnectIntervalSeconds` (default 2 s) after a failed attempt or a lost
   connection; one attempt times out after 3 s. `Disconnect()` stops reconnecting.
-- Latched data does not survive a reconnect on the bridge side (the shared transient_local publisher
-  may be recreated), so the UE client re-publishes its merged `/tf_static` message after every
+- Latched data does not survive a reconnect on the bridge side (the source's transient_local publisher
+  is destroyed), so the UE client re-publishes its merged `/tf_static` message after every
   successful handshake.
 
 ## 7. Ordering and flow control
@@ -366,7 +370,8 @@ make the receiver reserve 64 MiB.
    fed by a bounded queue (section 7); serialize writes per socket.
 3. `HELLO` → validate `protocol == 1` → `HELLO_ACK`. Reject other frames before `HELLO`.
 4. `ADVERTISE` / `SUBSCRIBE` → validate id, topic, type, QoS → shared, reference-counted rclpy
-   publisher per (topic, type) / raw subscription → `ERROR` on any problem.
+   publisher (volatile: shared by topic; transient_local: independent per id) / raw subscription
+   → `ERROR` on any problem.
 5. `PUBLISH` → `publisher.publish(cdr_bytes)`. `MESSAGE` ← raw subscription callback (u32 id prefix).
 6. `SUB_COUNT` on change, ≤ 2 Hz per client, full map of the client's publisher ids.
 7. `PING` → `PONG`. Drop clients silent for 10 s and connections without `HELLO` after a few seconds
@@ -384,6 +389,7 @@ make the receiver reserve 64 MiB.
 | timers | PING every 2 s, idle timeout 10 s, connect timeout 3 s, reconnect every `ReconnectIntervalSeconds` |
 | host name | an IP literal is used as is; any other `BridgeHost` is resolved on a thread-pool thread (never on the I/O thread), the result is reused for reconnects until an attempt fails |
 | `/tf` | one shared publisher, `tf2_msgs/msg/TFMessage`, reliable / volatile / 100 |
-| `/tf_static` | one shared publisher, every owner's static transforms merged into one latched TFMessage (reliable / transient_local / 1), re-published when the merged set changes and after every reconnect |
+| `/tf_static` | UE merges every owner's static transforms within one world into one latched TFMessage (reliable / transient_local / 1), re-published when the merged set changes and after every reconnect; the bridge keeps each advertisement's history independently across clients |
 | `/clock` | `rosgraph_msgs/msg/Clock`, reliable / volatile / 10, one message per world tick while connected, `UBot::Clock::GetSimTimeSeconds` |
+| command targets | velocity, attitude/body-rate and motor receivers remember the object that accepted the command weakly; selecting a different target releases the old one immediately, and timeout or EndPlay releases only the accepted object, never an uncommanded replacement; target changes preserve the valid-message timeout |
 | client name | `uBot UE <plugin version>` |

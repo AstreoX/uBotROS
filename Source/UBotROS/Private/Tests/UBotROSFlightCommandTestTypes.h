@@ -35,27 +35,45 @@ public:
     int32 MotorReleases = 0;
     int32 MotorCount = 4;
     bool bAccept = true;
+    TFunction<void()> OnApply;
+    TFunction<void()> OnRelease;
 
     virtual bool ApplyAttitudeCommand_Implementation(const FUBotAttitudeCommand& Command) override
     {
         Attitudes.Add(Command);
+        if (OnApply)
+        {
+            OnApply();
+        }
         return bAccept;
     }
 
     virtual bool ApplyBodyRateCommand_Implementation(const FUBotBodyRateCommand& Command) override
     {
         BodyRates.Add(Command);
+        if (OnApply)
+        {
+            OnApply();
+        }
         return bAccept;
     }
 
     virtual void ReleaseAttitudeCommand_Implementation() override
     {
         ++AttitudeReleases;
+        if (OnRelease)
+        {
+            OnRelease();
+        }
     }
 
     virtual bool ApplyMotorCommand_Implementation(const FUBotMotorCommand& Command) override
     {
         MotorCommands.Add(Command);
+        if (OnApply)
+        {
+            OnApply();
+        }
         return bAccept;
     }
 
@@ -67,6 +85,10 @@ public:
     virtual void ReleaseMotorCommand_Implementation() override
     {
         ++MotorReleases;
+        if (OnRelease)
+        {
+            OnRelease();
+        }
     }
 };
 

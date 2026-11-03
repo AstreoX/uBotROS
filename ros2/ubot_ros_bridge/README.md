@@ -110,8 +110,11 @@ ros2 launch ubot_ros_bridge ubot_ros_bridge.launch.py port:=8268 bind_address:=0
 - **握手**：客户端必须先发 HELLO。之前收到的其他请求回 `hello_required` 错误并忽略（PING/PONG 除外；PUBLISH 只报一次）。
   HELLO 中 `protocol` 不是 1 时回 `unsupported_protocol` 并关闭连接。
 - **话题与类型**：话题必须是绝对名称（以 `/` 开头）；类型写作 `pkg/msg/Name`（也接受 `pkg/Name`）。
-- **共享发布者**：同一话题在桥内只有一个 rclpy 发布者，被所有客户端的 ADVERTISE 共享并引用计数，
-  最后一个 UNADVERTISE（或断开）时销毁。同话题不同类型 → `type_conflict`；同类型不同 QoS →
+- **发布者历史**：`volatile` 话题的 ADVERTISE 共享一个 rclpy 发布者并引用计数，最后一个
+  UNADVERTISE（或断开）时销毁。`transient_local` 的每个 ADVERTISE 独立持有发布者及其 KEEP_LAST
+  历史，晚订阅者可以收到所有仍注册来源的保留样本；取消发布或断开只移除对应来源的历史。
+  因而多个 UE 客户端的 `/tf_static` 不会互相覆盖，桥仍原样转发 CDR、不合并或解码消息。
+  同话题不同类型 → `type_conflict`；同类型不同 QoS →
   `qos_conflict`。订阅也参与类型冲突检查（同一话题在桥内只能有一种类型）。
 - **SUB_COUNT**：每个客户端已 ADVERTISE 的 id 对应的订阅者数量（`get_subscription_count()`，
   包括桥自身为其他客户端创建的订阅）；内容变化时发送，最快每 0.5 s 一次，总是包含该客户端当前全部 id。
@@ -199,7 +202,8 @@ python3 -m pytest                                # 全部（也可用 python3 -m
 `ROS_DOMAIN_ID`），用 Python 客户端说协议，覆盖：HELLO/HELLO_ACK、PING/PONG、未知 op；
 ADVERTISE `sensor_msgs/msg/Imu` 后用 `serialize_message` 生成的 CDR 发布并验证 rclpy 订阅者收到完全相同的消息；
 SUBSCRIBE → MESSAGE（字节级一致）、transient_local 锁存、SUB_COUNT 随订阅者变化；
-共享发布者引用计数、各类冲突与错误码；断开后实体释放；帧头错误断开；慢客户端丢帧且不影响其他客户端；
+共享发布者引用计数、各发布源的 transient_local 历史、TF 晚订阅及来源退出；各类冲突与错误码；
+断开后实体释放；帧头错误断开；慢客户端丢帧且不影响其他客户端；
 空闲/未 HELLO 连接被断开、被阻塞的写线程不受空闲逻辑影响、客户端数量上限；嵌套过深的 JSON 回 `bad_request`；
 类型名不会导入任意模块；错误回复限流与客户端文本截断；SIGINT/SIGTERM 干净退出；以及下面的端到端检查脚本。
 进程内测试（`test_bridge_inprocess.py`）把 `OP_TIMEOUT_SECONDS` 调小并卡住执行器，验证断开时的释放不会丢失，

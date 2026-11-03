@@ -134,6 +134,12 @@ protected:
     /** Reports a rejected command once until the target accepts one again. */
     void NoteDispatchResult(const UObject* Target, bool bAccepted, const TCHAR* What);
 
+    /** As above, with the revision captured before invoking the target to detect reentrant changes. */
+    void NoteDispatchResult(UObject* Target, bool bAccepted, const TCHAR* What, uint64 DispatchRevision);
+
+    uint64 GetCommandRevision() const { return CommandRevision; }
+    bool IsEndingPlay() const { return bEndingPlay; }
+
     /** Broadcasts OnCommandError; identical consecutive messages are logged once. */
     void ReportError(const FString& Message, bool bSetupError);
 
@@ -143,8 +149,12 @@ private:
     FString ResolveCommandTopic() const;
     UObject* ResolveCommandTarget(FString* OutError) const;
     void CheckCommandTimeout();
+    void ReleaseCommandTarget();
 
     TWeakObjectPtr<UUBotROSBridgeSubsystem> BridgeSubsystem;
+    TWeakObjectPtr<UObject> AcceptedCommandTarget;
+    uint64 CommandRevision = 0;
+    bool bEndingPlay = false;
     int32 SubscriptionId = 0;
     FString ActiveCommandTopic;
     double LastCommandSimTimeSeconds = 0.0;

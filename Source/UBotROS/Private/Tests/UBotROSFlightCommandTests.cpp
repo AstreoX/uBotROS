@@ -2,6 +2,7 @@
 
 #if WITH_DEV_AUTOMATION_TESTS
 
+#include "Components/SceneComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/EngineBaseTypes.h"
 #include "Engine/World.h"
@@ -124,6 +125,138 @@ namespace UBotROSFlightCommandTests
         Message.thrust = Thrust;
         return Message;
     }
+
+    template <typename TComponent, typename TMessage>
+    bool TestOwnership(FAutomationTestBase& Test, const TMessage& Message,
+        int32 UUBotROSFlightCommandTestTarget::*ReleaseCount)
+    {
+        FScopedWorld Scope;
+        auto Fixture = Spawn<TComponent>(Scope, true);
+        auto* Second = NewObject<UUBotROSFlightCommandTestTarget>(Fixture.Owner);
+        Second->RegisterComponent();
+
+        Inject(*Fixture.Command, Message);
+        Fixture.Command->SetTargetComponent(Fixture.Target);
+        Test.TestEqual(TEXT("Same target retains accepted command"), Fixture.Target->*ReleaseCount, 0);
+        Fixture.Command->SetTargetComponent(Second);
+        Test.TestEqual(TEXT("Switch releases actual old target immediately"), Fixture.Target->*ReleaseCount, 1);
+        Test.TestTrue(TEXT("Switch preserves received-command timeout"), Fixture.Command->IsCommandActive());
+        Scope.TickFrames(6);
+        Test.TestEqual(TEXT("Uncommanded replacement is not released by timeout"), Second->*ReleaseCount, 0);
+        Test.TestEqual(TEXT("Old target not released twice"), Fixture.Target->*ReleaseCount, 1);
+        Test.TestEqual(TEXT("Timeout event remains armed"), Fixture.Listener->TimeoutCount, 1);
+
+        Second->bAccept = false;
+        Inject(*Fixture.Command, Message);
+        Scope.TickFrames(6);
+        Test.TestEqual(TEXT("Rejected command does not acquire ownership"), Second->*ReleaseCount, 0);
+        Second->bAccept = true;
+        Inject(*Fixture.Command, Message);
+        Fixture.Command->TargetComponent.OverrideComponent = Fixture.Target;
+        Scope.TickFrames(6);
+        Test.TestEqual(TEXT("Timeout releases accepted target after direct reference edit"), Second->*ReleaseCount, 1);
+        Test.TestEqual(TEXT("Timeout does not release newly resolved target"), Fixture.Target->*ReleaseCount, 1);
+
+        Inject(*Fixture.Command, Message);
+        auto* Invalid = NewObject<USceneComponent>(Fixture.Owner);
+        Invalid->RegisterComponent();
+        Fixture.Command->SetTargetComponent(Invalid);
+        Test.TestEqual(TEXT("Invalid replacement also releases old target"), Fixture.Target->*ReleaseCount, 2);
+        Scope.TickFrames(6);
+        Test.TestEqual(TEXT("Invalid replacement cannot duplicate the release"), Fixture.Target->*ReleaseCount, 2);
+
+        Fixture.Command->SetTargetComponent(nullptr);
+        Fixture.Command->CommandTimeoutSeconds = 0.0f;
+        Inject(*Fixture.Command, Message);
+        Fixture.Command->SetTargetComponent(Second);
+        Test.TestEqual(TEXT("Switch releases with timeout disabled"), Fixture.Target->*ReleaseCount, 3);
+        Inject(*Fixture.Command, Message);
+        Fixture.Command->TargetComponent.OverrideComponent = Fixture.Target;
+        Fixture.Owner->RouteEndPlay(EEndPlayReason::Destroyed);
+        Test.TestEqual(TEXT("EndPlay releases actual accepted target"), Second->*ReleaseCount, 2);
+        Test.TestEqual(TEXT("EndPlay leaves uncommanded resolved target alone"), Fixture.Target->*ReleaseCount, 3);
+        return true;
+    }
+
+    template <typename TComponent, typename TMessage>
+    bool TestReentry(FAutomationTestBase& Test, const TMessage& Message,
+        int32 UUBotROSFlightCommandTestTarget::*ReleaseCount)
+    {
+        FScopedWorld Scope;
+        auto Fixture = Spawn<TComponent>(Scope, true);
+        auto* Second = NewObject<UUBotROSFlightCommandTestTarget>(Fixture.Owner);
+        Second->RegisterComponent();
+        Fixture.Target->OnApply = [&]() { Fixture.Command->SetTargetComponent(Second); };
+        Inject(*Fixture.Command, Message);
+        Fixture.Target->OnApply = nullptr;
+        Test.TestEqual(TEXT("Target changed inside Apply is released after accepting"), Fixture.Target->*ReleaseCount, 1);
+
+        Inject(*Fixture.Command, Message);
+        Second->OnRelease = [&]()
+        {
+            Fixture.Command->SetTargetComponent(Fixture.Target);
+            Inject(*Fixture.Command, Message);
+        };
+        Fixture.Command->SetTargetComponent(nullptr);
+        Second->OnRelease = nullptr;
+        Test.TestEqual(TEXT("Release callback does not recurse"), Second->*ReleaseCount, 1);
+        Scope.TickFrames(6);
+        Test.TestEqual(TEXT("Reentrant command gets its own release"), Fixture.Target->*ReleaseCount, 2);
+
+        Inject(*Fixture.Command, Message);
+        Fixture.Target->DestroyComponent();
+        Fixture.Command->SetTargetComponent(Second);
+        Scope.TickFrames(6);
+        Test.TestEqual(TEXT("Weak destroyed target cannot release replacement"), Second->*ReleaseCount, 1);
+
+        Inject(*Fixture.Command, Message);
+        Second->OnRelease = [&]() { Inject(*Fixture.Command, Message); };
+        Fixture.Owner->RouteEndPlay(EEndPlayReason::Destroyed);
+        Second->OnRelease = nullptr;
+        Test.TestEqual(TEXT("EndPlay releases once despite reentrant input"), Second->*ReleaseCount, 2);
+        Test.TestFalse(TEXT("EndPlay cannot rearm command"), Fixture.Command->IsCommandActive());
+        return true;
+    }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSAttitudeTargetOwnershipTest, "UBotROS.AttitudeCommand.AcceptedTargetOwnership", UBotROSFlightCommandTests::TestFlags)
+
+bool FUBotROSAttitudeTargetOwnershipTest::RunTest(const FString& Parameters)
+{
+    return UBotROSFlightCommandTests::TestOwnership<UUBotROSAttitudeCommandComponent>(*this,
+        UBotROSFlightCommandTests::MakeAttitude(0.0, 0.5f), &UUBotROSFlightCommandTestTarget::AttitudeReleases);
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSAttitudeTargetReentryTest, "UBotROS.AttitudeCommand.TargetSwitchReentry", UBotROSFlightCommandTests::TestFlags)
+
+bool FUBotROSAttitudeTargetReentryTest::RunTest(const FString& Parameters)
+{
+    // The same ownership path also covers body-rate commands.
+    FUBotRosAttitudeTarget Message;
+    Message.type_mask = FUBotRosAttitudeTarget::IGNORE_ATTITUDE;
+    Message.thrust = 0.5f;
+    return UBotROSFlightCommandTests::TestReentry<UUBotROSAttitudeCommandComponent>(*this,
+        Message, &UUBotROSFlightCommandTestTarget::AttitudeReleases);
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSMotorTargetOwnershipTest, "UBotROS.MotorCommand.AcceptedTargetOwnership", UBotROSFlightCommandTests::TestFlags)
+
+bool FUBotROSMotorTargetOwnershipTest::RunTest(const FString& Parameters)
+{
+    FUBotRosActuators Message;
+    Message.normalized = { 0.5, 0.5, 0.5, 0.5 };
+    return UBotROSFlightCommandTests::TestOwnership<UUBotROSMotorCommandComponent>(*this,
+        Message, &UUBotROSFlightCommandTestTarget::MotorReleases);
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSMotorTargetReentryTest, "UBotROS.MotorCommand.TargetSwitchReentry", UBotROSFlightCommandTests::TestFlags)
+
+bool FUBotROSMotorTargetReentryTest::RunTest(const FString& Parameters)
+{
+    FUBotRosActuators Message;
+    Message.normalized = { 0.5, 0.5, 0.5, 0.5 };
+    return UBotROSFlightCommandTests::TestReentry<UUBotROSMotorCommandComponent>(*this,
+        Message, &UUBotROSFlightCommandTestTarget::MotorReleases);
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSAttitudeCommandDispatchTest, "UBotROS.AttitudeCommand.Dispatch", UBotROSFlightCommandTests::TestFlags)
