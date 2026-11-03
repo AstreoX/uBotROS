@@ -138,9 +138,13 @@ private:
     UObject* ResolveCommandTarget(FString* OutError) const;
     void DispatchCommand(const FUBotVelocityCommand& Command);
     void CheckCommandTimeout();
+    void ReleaseCommandTarget();
     void ReportError(const FString& Message, bool bSetupError);
 
     TWeakObjectPtr<UUBotROSBridgeSubsystem> BridgeSubsystem;
+    TWeakObjectPtr<UObject> AcceptedCommandTarget;
+    uint64 CommandRevision = 0;
+    bool bEndingPlay = false;
     int32 SubscriptionId = 0;
     FString ActiveCommandTopic;
 

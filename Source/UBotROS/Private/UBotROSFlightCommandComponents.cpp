@@ -30,6 +30,10 @@ UObject* UUBotROSAttitudeCommandComponent::FindTargetOn(const AActor* Actor) con
 
 void UUBotROSAttitudeCommandComponent::HandlePayload(TConstArrayView<uint8> Cdr)
 {
+    if (IsEndingPlay())
+    {
+        return;
+    }
     FUBotRosAttitudeTarget Message;
     if (!UBot::Ros::Decode(Cdr, Message))
     {
@@ -50,22 +54,29 @@ void UUBotROSAttitudeCommandComponent::HandlePayload(TConstArrayView<uint8> Cdr)
     }
 
     NoteValidCommand();
-    UObject* Target = ResolveTargetForDispatch();
+    const uint64 DispatchRevision = GetCommandRevision();
     if (bBodyRate)
     {
         LastBodyRateCommand = BodyRate;
+    }
+    else
+    {
+        LastAttitudeCommand = Attitude;
+    }
+    UObject* Target = ResolveTargetForDispatch();
+    if (bBodyRate)
+    {
         if (Target)
         {
-            NoteDispatchResult(Target, IUBotAttitudeCommandable::Execute_ApplyBodyRateCommand(Target, BodyRate), TEXT("body-rate command"));
+            NoteDispatchResult(Target, IUBotAttitudeCommandable::Execute_ApplyBodyRateCommand(Target, BodyRate), TEXT("body-rate command"), DispatchRevision);
         }
         OnBodyRateCommand.Broadcast(BodyRate);
     }
     else
     {
-        LastAttitudeCommand = Attitude;
         if (Target)
         {
-            NoteDispatchResult(Target, IUBotAttitudeCommandable::Execute_ApplyAttitudeCommand(Target, Attitude), TEXT("attitude command"));
+            NoteDispatchResult(Target, IUBotAttitudeCommandable::Execute_ApplyAttitudeCommand(Target, Attitude), TEXT("attitude command"), DispatchRevision);
         }
         OnAttitudeCommand.Broadcast(Attitude);
     }
@@ -101,6 +112,10 @@ UObject* UUBotROSMotorCommandComponent::FindTargetOn(const AActor* Actor) const
 
 void UUBotROSMotorCommandComponent::HandlePayload(TConstArrayView<uint8> Cdr)
 {
+    if (IsEndingPlay())
+    {
+        return;
+    }
     FUBotRosActuators Message;
     if (!UBot::Ros::Decode(Cdr, Message))
     {
@@ -119,18 +134,23 @@ void UUBotROSMotorCommandComponent::HandlePayload(TConstArrayView<uint8> Cdr)
     }
 
     NoteValidCommand();
+    const uint64 DispatchRevision = GetCommandRevision();
     LastMotorCommand = Command;
     if (UObject* Target = ResolveTargetForDispatch())
     {
         const int32 MotorCount = IUBotMotorCommandable::Execute_GetMotorCount(Target);
-        if (MotorCount != Command.Values.Num())
+        // GetMotorCount is also user code and may change the receiver's target.
+        if (DispatchRevision == GetCommandRevision() && !IsEndingPlay() && IsValid(Target))
         {
-            ReportError(FString::Printf(TEXT("%s: the motor command has %d values but %s has %d motors; not dispatched."),
-                *GetPathNameSafe(this), Command.Values.Num(), *GetPathNameSafe(Target), MotorCount), false);
-        }
-        else
-        {
-            NoteDispatchResult(Target, IUBotMotorCommandable::Execute_ApplyMotorCommand(Target, Command), TEXT("motor command"));
+            if (MotorCount != Command.Values.Num())
+            {
+                ReportError(FString::Printf(TEXT("%s: the motor command has %d values but %s has %d motors; not dispatched."),
+                    *GetPathNameSafe(this), Command.Values.Num(), *GetPathNameSafe(Target), MotorCount), false);
+            }
+            else
+            {
+                NoteDispatchResult(Target, IUBotMotorCommandable::Execute_ApplyMotorCommand(Target, Command), TEXT("motor command"), DispatchRevision);
+            }
         }
     }
     OnMotorCommand.Broadcast(Command);

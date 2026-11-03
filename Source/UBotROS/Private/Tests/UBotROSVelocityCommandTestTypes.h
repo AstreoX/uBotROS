@@ -39,16 +39,26 @@ public:
 
     /** Return value of ApplyVelocityCommand. */
     bool bAcceptCommands = true;
+    TFunction<void()> OnApply;
+    TFunction<void()> OnStop;
 
     virtual bool ApplyVelocityCommand_Implementation(const FUBotVelocityCommand& Command) override
     {
         AppliedCommands.Add(Command);
+        if (OnApply)
+        {
+            OnApply();
+        }
         return bAcceptCommands;
     }
 
     virtual void StopMotion_Implementation() override
     {
         ++StopMotionCount;
+        if (OnStop)
+        {
+            OnStop();
+        }
     }
 };
 

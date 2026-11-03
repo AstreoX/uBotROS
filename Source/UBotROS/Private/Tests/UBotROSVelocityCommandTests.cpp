@@ -320,6 +320,104 @@ bool FUBotROSVelocityCommandTargetSelectionTest::RunTest(const FString& Paramete
     return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSVelocityCommandOwnershipTest, "UBotROS.VelocityCommand.AcceptedTargetOwnership", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotROSVelocityCommandOwnershipTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSVelocityCommandTests;
+    FScopedCommandTestWorld Scope;
+    FCommandFixture Fixture = SpawnFixture(Scope, true);
+    auto* Second = NewObject<UUBotROSVelocityCommandTestTarget>(Fixture.Owner);
+    Second->RegisterComponent();
+
+    Inject(*Fixture.Command, GoldenTwist());
+    Fixture.Command->SetTargetComponent(Fixture.Target);
+    TestEqual(TEXT("Selecting the same target retains its command"), Fixture.Target->StopMotionCount, 0);
+    Fixture.Command->SetTargetComponent(Second);
+    TestEqual(TEXT("Switch immediately stops the accepted old target"), Fixture.Target->StopMotionCount, 1);
+    TestTrue(TEXT("Switch preserves received-command timeout semantics"), Fixture.Command->IsCommandActive());
+    Scope.TickFrames(6);
+    TestEqual(TEXT("Uncommanded replacement is not stopped at timeout"), Second->StopMotionCount, 0);
+    TestEqual(TEXT("Old target is not stopped again"), Fixture.Target->StopMotionCount, 1);
+    TestEqual(TEXT("Timeout still fires once"), Fixture.Listener->TimeoutCount, 1);
+
+    Second->bAcceptCommands = false;
+    Inject(*Fixture.Command, GoldenTwist());
+    Scope.TickFrames(6);
+    TestEqual(TEXT("A rejected command does not acquire stop ownership"), Second->StopMotionCount, 0);
+    Second->bAcceptCommands = true;
+    Inject(*Fixture.Command, GoldenTwist());
+    // Direct C++/editor reference edits bypass SetTargetComponent; timeout must still use ownership.
+    Fixture.Command->TargetComponent.OverrideComponent = Fixture.Target;
+    Scope.TickFrames(6);
+    TestEqual(TEXT("Timeout stops actual accepted target after direct reference edit"), Second->StopMotionCount, 1);
+    TestEqual(TEXT("Timeout does not stop newly resolved target"), Fixture.Target->StopMotionCount, 1);
+
+    Inject(*Fixture.Command, GoldenTwist());
+    auto* Invalid = NewObject<USceneComponent>(Fixture.Owner);
+    Invalid->RegisterComponent();
+    Fixture.Command->SetTargetComponent(Invalid);
+    TestEqual(TEXT("Switch to a non-commandable target releases old target"), Fixture.Target->StopMotionCount, 2);
+    Scope.TickFrames(6);
+    TestEqual(TEXT("Invalid replacement cannot cause a duplicate stop"), Fixture.Target->StopMotionCount, 2);
+
+    Fixture.Command->SetTargetComponent(nullptr);
+    Fixture.Command->CommandTimeoutSeconds = 0.0f;
+    Inject(*Fixture.Command, GoldenTwist());
+    Fixture.Command->SetTargetComponent(Second);
+    TestEqual(TEXT("Switch releases even with timeout disabled"), Fixture.Target->StopMotionCount, 3);
+    Inject(*Fixture.Command, GoldenTwist());
+    Fixture.Command->TargetComponent.OverrideComponent = Fixture.Target;
+    Fixture.Owner->RouteEndPlay(EEndPlayReason::Destroyed);
+    TestEqual(TEXT("EndPlay releases actual accepted target"), Second->StopMotionCount, 2);
+    TestEqual(TEXT("EndPlay does not stop current uncommanded target"), Fixture.Target->StopMotionCount, 3);
+    return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSVelocityCommandReentryTest, "UBotROS.VelocityCommand.TargetSwitchReentry", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+
+bool FUBotROSVelocityCommandReentryTest::RunTest(const FString& Parameters)
+{
+    using namespace UBotROSVelocityCommandTests;
+    FScopedCommandTestWorld Scope;
+    FCommandFixture Fixture = SpawnFixture(Scope, true);
+    auto* Second = NewObject<UUBotROSVelocityCommandTestTarget>(Fixture.Owner);
+    Second->RegisterComponent();
+    Fixture.Target->OnApply = [&]() { Fixture.Command->SetTargetComponent(Second); };
+    Inject(*Fixture.Command, GoldenTwist());
+    Fixture.Target->OnApply = nullptr;
+    TestEqual(TEXT("Target changed inside Apply is released after accepting"), Fixture.Target->StopMotionCount, 1);
+    TestEqual(TEXT("Replacement never received the old command"), Second->AppliedCommands.Num(), 0);
+
+    Inject(*Fixture.Command, GoldenTwist());
+    Second->OnStop = [&]()
+    {
+        Fixture.Command->SetTargetComponent(Fixture.Target);
+        Inject(*Fixture.Command, GoldenTwist());
+    };
+    Fixture.Command->SetTargetComponent(nullptr);
+    Second->OnStop = nullptr;
+    TestEqual(TEXT("Release callback is not called recursively"), Second->StopMotionCount, 1);
+    Scope.TickFrames(6);
+    TestEqual(TEXT("New command from release callback owns its own timeout"), Fixture.Target->StopMotionCount, 2);
+
+    // Destruction invalidates the weak owner; a different configured target must remain untouched.
+    Inject(*Fixture.Command, GoldenTwist());
+    Fixture.Target->DestroyComponent();
+    Fixture.Command->SetTargetComponent(Second);
+    Scope.TickFrames(6);
+    TestEqual(TEXT("Destroyed old target cannot stop its replacement"), Second->StopMotionCount, 1);
+
+    Inject(*Fixture.Command, GoldenTwist());
+    Second->OnStop = [&]() { Inject(*Fixture.Command, GoldenTwist()); };
+    const int32 CommandsBeforeEndPlay = Second->AppliedCommands.Num();
+    Fixture.Owner->RouteEndPlay(EEndPlayReason::Destroyed);
+    Second->OnStop = nullptr;
+    TestEqual(TEXT("EndPlay release cannot rearm a command"), Second->AppliedCommands.Num(), CommandsBeforeEndPlay);
+    TestFalse(TEXT("Receiver stays inactive after reentrant EndPlay callback"), Fixture.Command->IsCommandActive());
+    return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUBotROSVelocityCommandClampTest, "UBotROS.VelocityCommand.Clamp", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
 bool FUBotROSVelocityCommandClampTest::RunTest(const FString& Parameters)
