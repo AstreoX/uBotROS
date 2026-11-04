@@ -51,6 +51,12 @@ flowchart LR
 | `/<ns>/cmd_vel` | `geometry_msgs/msg/Twist` | ROS 2 → UE |
 | `/<ns>/cmd_attitude`、`/<ns>/cmd_motors` | `mavros_msgs/msg/AttitudeTarget`、`actuator_msgs/msg/Actuators` | ROS 2 → UE |
 
+## 0.2.0 源码迁移
+
+尚未发布的 **0.2.0** 源码要求 uBotCore 和 uBotSensor `^0.2.0`。ROS 光学系、时间和名称工具位于 `UBot::ROSConventions`（`UBotROSConventionHelpers.h`），轴向换算使用 Core 的 `UBot::RightHanded`；Core 的旧换算 API 已删除。uBotROS 将 5 个旧 ROS 专属蓝图节点重定向到 `UUBotROSConventionsLibrary`，须先启用本插件并重启编辑器，再加载、编译和重存相关资产。
+
+C++ 调用方须修改头文件和命名空间，统一重编所有依赖模块，不能混用 0.1.x 与 0.2.0 DLL，见 [Core API 迁移](https://astreox.github.io/uBotDocs/develop/migration/#core-旧-ros-api-迁移020-开发版)。下方安装示例仍使用已发布的 0.1.x 标签；0.2.0 暂不能通过 uBot Manager 安装。
+
 ## 安装
 
 **推荐：uBot Manager。** 从 [uBotManager 的 Releases](https://github.com/AstreoX/uBotManager/releases) 下载安装包，打开工程的 `.uproject`，应用「ROS 2 传感器」组合（Recipe）。该组合会安装并启用 UBotCore、UBotSensor 和 uBot ROS，步骤见[安装 uBot](https://astreox.github.io/uBotDocs/start/install/)。

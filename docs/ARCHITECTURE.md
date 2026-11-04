@@ -40,7 +40,7 @@ UE 本地保留策略与 DDS QoS 独立配置。旧接口保留现行行为；�
 
 ## 在 uBot 系列中的位置
 
-UBotROS 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.1.3` 和 `UBotSensor ^0.1.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。
+尚未发布的 UBotROS 0.2.0 是 **Adapter**（适配器）层，只依赖 `UBotCore ^0.2.0` 和 `UBotSensor ^0.2.0`（`.uplugin` 的 `"Plugins"` 与 `"UBot"` 块都声明了这两个依赖）。所有依赖模块须统一重编，不能混用 0.1.x 与 0.2.0 DLL。
 
 | Package | 层 | 作用 |
 | --- | --- | --- |

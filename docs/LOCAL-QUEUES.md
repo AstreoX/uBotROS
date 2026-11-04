@@ -1,6 +1,6 @@
 # UE 本地发布队列
 
-本页描述未发布的 uBotROS 0.1.4，依赖 uBotCore 0.1.4 和 uBotSensor 0.1.3。请从配套源码统一重新编译，不混用旧版本 DLL。
+本页描述未发布的 uBotROS 0.2.0，依赖 uBotCore 和 uBotSensor `^0.2.0`。请从配套源码统一重新编译，不能混用 0.1.x 与 0.2.0 DLL。
 
 本地排队发生在 CDR 编码之后、socket 发送之前，与 ROS 2 的 DDS QoS 是独立配置。线协议和消息字节布局不变。
 
