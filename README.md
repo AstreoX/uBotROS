@@ -59,6 +59,12 @@ When several UE clients use the same bridge, each transient-local advertisement 
 history, so late `/tf_static` subscribers receive every connected client's latest static transform set.
 Unadvertising or disconnecting removes only that source's history. Volatile publishers remain shared.
 
+## 0.2.0 source migration
+
+The unreleased **0.2.0** source requires uBotCore and uBotSensor `^0.2.0`. ROS optical-frame, time and name helpers live in `UBot::ROSConventions` (`UBotROSConventionHelpers.h`); axis conversions use Core's `UBot::RightHanded`. Core's old conversion API has been removed. uBotROS redirects the five old ROS-specific Blueprint nodes to `UUBotROSConventionsLibrary`; enable this plugin before loading those assets, restart the editor, compile and resave them.
+
+Update native includes/namespaces and rebuild all dependent modules together; 0.1.x DLLs cannot be mixed with 0.2.0. See [Core API migration](https://astreox.github.io/uBotDocs/develop/migration/#core-旧-ros-api-迁移020-开发版). The installation examples below use released 0.1.x tags; 0.2.0 is not yet installable through uBot Manager.
+
 ## Install
 
 **Recommended: uBot Manager.** Download the installer from the [uBotManager releases](https://github.com/AstreoX/uBotManager/releases), open the `.uproject` and apply the **ROS 2 Sensors** recipe. The recipe installs and enables UBotCore, UBotSensor and uBot ROS; see [Install uBot](https://astreox.github.io/uBotDocs/start/install/).
